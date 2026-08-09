@@ -1,2 +1,124 @@
-# backend
-백엔드 레포지토리입니다.
+# flourishing-backend
+
+관리하는 행보관 서비스의 Spring Boot 백엔드 저장소입니다.
+
+## 요구사항
+
+- JDK 21
+- Docker 및 Docker Compose
+- MySQL Client(DDL 수동 적용 시)
+
+## 기술 스택
+
+- Spring Boot 3.4.2
+- Gradle Groovy DSL
+- Spring Data JPA, QueryDSL 5.1.0
+- MySQL 8.0, Redis 7
+- Spring Security, Bean Validation
+- springdoc OpenAPI 2.8.6
+- JUnit 5
+
+## 로컬 실행
+
+### 1. 환경변수 준비
+
+```bash
+cp .env.example .env
+```
+
+`.env`의 `DB_PASSWORD`를 로컬에서 사용할 값으로 변경합니다. 실제 비밀값은 Git에 커밋하지 않습니다.
+
+### 2. MySQL과 Redis 실행
+
+```bash
+DB_PASSWORD=<비밀번호> docker compose up -d mysql-db redis
+```
+
+### 3. 스키마 적용
+
+애플리케이션은 `ddl-auto: validate`를 사용하므로 최초 한 번 DDL을 직접 적용해야 합니다.
+
+```bash
+mysql -h 127.0.0.1 -P 3306 -u root -p flourishing < db/schema.sql
+```
+
+### 4. 애플리케이션 실행
+
+```bash
+DB_PASSWORD=<비밀번호> \
+SPRING_PROFILES_ACTIVE=local \
+./gradlew bootRun
+```
+
+정상 실행 확인:
+
+```bash
+curl http://localhost:8080/health
+```
+
+예상 응답:
+
+```text
+OK
+```
+
+## Docker 애플리케이션 실행
+
+먼저 프로젝트를 빌드하고 스키마를 적용한 다음 애플리케이션 프로파일을 활성화합니다.
+
+```bash
+./gradlew clean build
+DB_PASSWORD=<비밀번호> docker compose --profile app up --build
+```
+
+## 테스트와 빌드
+
+```bash
+./gradlew test
+./gradlew clean build --no-daemon
+```
+
+테스트 프로파일은 H2를 사용하므로 단위·컨텍스트 테스트 실행에 MySQL이 필요하지 않습니다.
+
+## API 문서
+
+애플리케이션 실행 후 다음 경로를 사용합니다.
+
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+
+## 주요 환경변수
+
+| 변수 | 설명 | 기본값 |
+|---|---|---|
+| `DB_USERNAME` | MySQL 사용자명 | `root` |
+| `DB_PASSWORD` | MySQL 비밀번호 | 없음 |
+| `SPRING_DATASOURCE_URL` | MySQL JDBC URL | 로컬 `flourishing` DB |
+| `REDIS_HOST` | Redis 호스트 | `localhost` |
+| `REDIS_PORT` | Redis 포트 | `6379` |
+| `FRONTEND_ALLOWED_ORIGINS` | 허용할 프론트엔드 Origin 목록 | `http://localhost:5173` |
+| `SERVER_PORT` | 애플리케이션 포트 | `8080` |
+
+## 데이터베이스
+
+- DB 이름: `flourishing`
+- 문자셋: `utf8mb4`
+- 기본 시간대: UTC
+- 스키마: `db/schema.sql`
+- 애플리케이션은 스키마를 자동 생성하거나 변경하지 않습니다.
+
+## 브랜치 전략
+
+- `develop`: 기본 개발 브랜치
+- `main`: 운영 브랜치
+- `feat/{이슈번호}`: 기능 개발 브랜치
+
+기능 개발 후 `develop`에 병합하고, 개발 환경 검증 후 `main`에 병합합니다.
+
+## 커밋 컨벤션
+
+```text
+{이슈번호} {type}: 한글 커밋 메시지
+```
+
+자세한 내용은 [개발 컨벤션](docs/CONVENTIONS.md)을 확인합니다.
