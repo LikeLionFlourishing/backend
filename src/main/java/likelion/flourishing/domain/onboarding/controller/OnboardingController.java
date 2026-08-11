@@ -14,6 +14,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 온보딩 엔드포인트. 명세 Onboarding 태그의 PUT /v1/me/onboarding 하나를 담당한다.
+ *
+ * <p>가입 직후 한 번 거치는 화면으로, 필수 동의와 알림 선택을 함께 저장하고 가입을 완료 처리한다.
+ * 이 요청이 성공해야 GET /v1/me의 signupcompleted가 true가 된다.
+ *
+ * <p>POST가 아니라 PUT인 이유는 같은 요청을 여러 번 보내도 결과가 같아야 하기 때문이다.
+ * 사용자가 완료 버튼을 두 번 누르거나 화면을 다시 열어도 이력이 중복되지 않는다.
+ */
 @Tag(name = "Onboarding", description = "이용범위 동의와 최초 설정")
 @RestController
 @RequestMapping("/v1")

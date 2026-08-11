@@ -33,6 +33,18 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+/**
+ * OnboardingController의 HTTP 계약 테스트. 서비스는 가짜(mock)로 두고 요청·응답 모양만 검증한다.
+ *
+ * <p>확인하는 것: 정상 요청이 200과 다섯 필드를 돌려주는지, 그리고 잘못된 요청 네 가지가
+ * 서비스까지 가지 않고 각각 맞는 상태 코드로 막히는지.
+ *
+ * <ul>
+ *   <li>sensitiveDataConsent가 false — 422. 명세가 const true로 못 박은 필수 동의라 거절을 저장하지 않는다.
+ *   <li>notificationPermission 누락, consentVersion 공백 — 422. 값 검증 실패라 어느 필드인지 함께 담는다.
+ *   <li>정의되지 않은 필드, enum에 없는 값 — 400. 본문을 객체로 만들지 못한 단계의 실패다.
+ * </ul>
+ */
 @WebMvcTest(OnboardingController.class)
 @AutoConfigureMockMvc(addFilters = false)
 @EnableConfigurationProperties({CorsProperties.class, ProblemProperties.class})

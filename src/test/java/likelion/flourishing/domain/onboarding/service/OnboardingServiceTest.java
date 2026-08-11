@@ -32,6 +32,22 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+/**
+ * OnboardingService의 저장 규칙 테스트. DB 없이 가짜 저장소와 고정 시계로만 돌린다.
+ *
+ * <p>시계를 고정한 이유는 저장 시각과 응답 시각이 같은지 값으로 비교하기 위해서다.
+ * 실제 시간을 쓰면 호출할 때마다 값이 달라져 검증할 수 없다.
+ *
+ * <p>확인하는 것:
+ * <ul>
+ *   <li>첫 호출에 동의 이력과 알림 설정을 만들고 응답 다섯 필드를 채우는지
+ *   <li>남기는 동의가 SENSITIVE_DATA 한 건뿐인지 — 요청에 없는 동의를 서버가 대신 기록하지 않는다
+ *   <li>같은 버전으로 다시 부르면 최초 동의 시각을 유지하고 새 행을 만들지 않는지
+ *   <li>알림 설정은 기존 행이 있으면 새로 만들지 않고 덮어쓰는지
+ *   <li>알림 켜기 + 권한 거부 조합도 그대로 저장하는지
+ *   <li>가입 완료 처리를 auth에 위임해 호출하는지
+ * </ul>
+ */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class OnboardingServiceTest {
