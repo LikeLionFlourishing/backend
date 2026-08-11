@@ -45,6 +45,13 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+/**
+ * SessionController의 HTTP 계약 테스트. 서비스는 가짜(mock)로 두고 요청·응답 모양만 검증한다.
+ *
+ * <p>확인하는 것: 로그인 201과 세션 쿠키, 비밀번호가 틀렸을 때 problem+json 형식과
+ * INVALID_CREDENTIALS 코드, 요청 제한에 걸렸을 때 Retry-After와 X-RateLimit-* 헤더,
+ * 현재 세션 조회가 CSRF 토큰을 돌려주는지, 로그아웃이 만료된 쿠키를 내리는지.
+ */
 @WebMvcTest(SessionController.class)
 @AutoConfigureMockMvc(addFilters = false)
 @EnableConfigurationProperties({CorsProperties.class, ProblemProperties.class})

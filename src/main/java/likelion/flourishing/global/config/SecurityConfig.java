@@ -17,6 +17,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Spring Security 설정. 어떤 경로를 누가 부를 수 있는지와 인증 실패 응답 형식을 정한다.
+ *
+ * <p>접근 정책은 화이트리스트 방식이다. 마지막이 anyRequest().denyAll()이라 위에 적지 않은
+ * 경로는 전부 막힌다. 새 엔드포인트를 만들면 여기에 한 줄 추가해야 하고, 빠뜨리면 403이 난다.
+ * requestMatchers에 적은 경로는 정확히 일치할 때만 걸리므로 상위 경로를 적어도 그 하위 경로까지
+ * 함께 열리지는 않는다. 하위 경로가 필요하면 따로 적어야 한다.
+ *
+ * <p>로그인 상태는 서버 세션이나 JWT가 아니라 DB에 저장한 세션 행과 쿠키로만 판단한다.
+ * 그래서 폼 로그인, HTTP Basic, 기본 로그아웃 처리를 모두 끄고 세션 정책도 STATELESS로 둔다.
+ */
 @Configuration
 public class SecurityConfig {
 

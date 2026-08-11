@@ -33,6 +33,15 @@ import org.mockito.quality.Strictness;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+/**
+ * AuthService의 회원가입·로그인 규칙 테스트. DB와 Redis 없이 가짜 객체로만 돌린다.
+ *
+ * <p>확인하는 것: 가입 시 정규화한 이메일을 저장하고 세션까지 발급하는지, 이미 가입된 이메일을
+ * 막는지, 요청 제한을 넘기면 가입을 중단하는지, 비밀번호가 맞을 때만 세션을 주는지.
+ *
+ * <p>loginHidesWhetherEmailExists는 보안 검증이다. 없는 이메일로 로그인해도 비밀번호 대조를
+ * 한 번 수행해, 응답이 돌아오는 속도만 보고 가입 여부를 알아내지 못하게 한 것을 확인한다.
+ */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class AuthServiceTest {

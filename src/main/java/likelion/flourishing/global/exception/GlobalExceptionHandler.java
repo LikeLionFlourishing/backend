@@ -18,6 +18,24 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+/**
+ * 컨트롤러에서 빠져나온 예외를 모두 명세 Problem 형식(application/problem+json)으로 바꾼다.
+ *
+ * <p>상태 코드를 나누는 기준은 명세 정의를 따른다.
+ * <ul>
+ *   <li>400 — 본문을 읽지 못한 경우. JSON 문법 오류, 정의되지 않은 필드, enum에 없는 값,
+ *       필수 헤더 누락처럼 객체를 만들기 전에 실패한 것들이다.
+ *   <li>422 — 본문은 읽혔지만 값이 규칙에 맞지 않는 경우. @Valid 검증 실패가 여기 해당하고
+ *       어느 필드가 왜 틀렸는지 errors 배열에 담는다.
+ *   <li>429 — 요청 제한 초과. 재시도 시점을 알려주는 Retry-After와 X-RateLimit-* 헤더를 함께 붙인다.
+ * </ul>
+ *
+ * <p>맨 아래 Exception 처리기는 예상 못 한 오류를 500으로 바꾸면서 requestId와 예외 타입만 로그로
+ * 남긴다. 스택 트레이스나 내부 메시지를 응답에 넣으면 서버 구조가 밖으로 새기 때문이다.
+ *
+ * <p>필터에서 나는 예외는 아직 컨트롤러에 닿기 전이라 여기로 오지 않는다. 그쪽은
+ * {@link ProblemResponseWriter}가 같은 형식으로 직접 쓴다.
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 

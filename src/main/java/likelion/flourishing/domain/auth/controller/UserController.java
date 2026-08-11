@@ -25,6 +25,15 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 계정 엔드포인트. 명세 Authentication 태그 중 /users와 /me 경로를 담당한다.
+ *
+ * <p>POST /v1/users 회원가입, GET /v1/me 내 계정 조회, DELETE /v1/me 계정 삭제를 제공한다.
+ * 회원가입은 계정을 만들고 곧바로 로그인 세션까지 발급해 별도 로그인 요청 없이 이어지게 한다.
+ *
+ * <p>계정 삭제는 되돌릴 수 없어 X-Confirm-Deletion 헤더 값이 정확할 때만 진행한다.
+ * 실수로 부른 DELETE를 막는 장치라 서비스가 아니라 요청 경계인 여기서 검사한다.
+ */
 @Tag(name = "Authentication", description = "회원가입과 쿠키 세션")
 @RestController
 @RequestMapping("/v1")

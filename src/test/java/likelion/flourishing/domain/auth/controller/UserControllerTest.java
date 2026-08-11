@@ -42,6 +42,16 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+/**
+ * UserController의 HTTP 계약 테스트. 서비스는 가짜(mock)로 두고 요청·응답 모양만 검증한다.
+ *
+ * <p>확인하는 것: 회원가입 201과 Location·Set-Cookie 헤더, 짧은 비밀번호가 422이고 어느 필드가
+ * 틀렸는지 담기는지, 정의되지 않은 필드가 400인지, 계정 삭제가 확인 헤더 없이는 막히고
+ * 성공 시 쿠키를 지우는지.
+ *
+ * <p>addFilters = false로 보안 필터를 끄고 authentication(...)으로 로그인 상태를 흉내 낸다.
+ * 필터까지 켜면 쿠키와 세션 조회가 필요해져 컨트롤러 검증에 집중할 수 없기 때문이다.
+ */
 @WebMvcTest(UserController.class)
 @AutoConfigureMockMvc(addFilters = false)
 @EnableConfigurationProperties({CorsProperties.class, ProblemProperties.class})

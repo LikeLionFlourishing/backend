@@ -32,6 +32,16 @@ import org.springframework.web.bind.annotation.RestController;
         ProblemFactory.class,
         GlobalExceptionHandlerTest.TestController.class
 })
+/**
+ * 예외를 명세 Problem 형식으로 바꾸는 규칙 테스트.
+ *
+ * <p>실제 도메인 컨트롤러 대신 이 테스트 안에 임시 컨트롤러를 두고 일부러 예외를 던진다.
+ * 특정 기능에 얽매이지 않고 변환 규칙만 확인하기 위해서다.
+ *
+ * <p>확인하는 것: BusinessException이 코드에 맞는 상태와 problem+json이 되는지,
+ * 검증 실패가 어느 필드가 왜 틀렸는지 errors 배열에 담는지, 깨진 JSON이 400인지,
+ * 그리고 예상 못 한 예외가 500이 되면서 내부 메시지나 스택 트레이스를 응답에 노출하지 않는지.
+ */
 class GlobalExceptionHandlerTest {
 
     @Autowired
