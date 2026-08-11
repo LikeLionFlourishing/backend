@@ -39,6 +39,24 @@ public enum ErrorCode {
             "삭제 확인 필요",
             "계정 삭제를 확인하는 헤더가 올바르지 않습니다."
     ),
+    CHECK_IN_DATE_NOT_TODAY(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "CHECK_IN_DATE_NOT_TODAY",
+            "저장할 수 없는 날짜",
+            "오늘 날짜만 저장할 수 있습니다."
+    ),
+    CHECK_IN_STATE_NOT_ALLOWED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "CHECK_IN_STATE_NOT_ALLOWED",
+            "저장할 수 없는 상태",
+            "이 요청으로는 불편 없음만 저장할 수 있습니다."
+    ),
+    CHECK_IN_ALREADY_REPORTED(
+            HttpStatus.CONFLICT,
+            "CHECK_IN_ALREADY_REPORTED",
+            "이미 보고된 날",
+            "피부 보고가 저장된 날은 불편 없음으로 바꿀 수 없습니다."
+    ),
     TOO_MANY_REQUESTS(
             HttpStatus.TOO_MANY_REQUESTS,
             "TOO_MANY_REQUESTS",
