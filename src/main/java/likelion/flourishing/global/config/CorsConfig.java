@@ -33,8 +33,20 @@ public class CorsConfig implements WebMvcConfigurer {
                         HttpMethod.DELETE.name(),
                         HttpMethod.OPTIONS.name()
                 )
-                .allowedHeaders(HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT, "X-CSRF-Token", "Idempotency-Key")
-                .exposedHeaders(HttpHeaders.LOCATION)
+                .allowedHeaders(
+                        HttpHeaders.CONTENT_TYPE,
+                        HttpHeaders.ACCEPT,
+                        "X-CSRF-Token",
+                        "Idempotency-Key",
+                        "X-Confirm-Deletion"
+                )
+                .exposedHeaders(
+                        HttpHeaders.LOCATION,
+                        HttpHeaders.RETRY_AFTER,
+                        "X-RateLimit-Limit",
+                        "X-RateLimit-Remaining",
+                        "X-RateLimit-Reset"
+                )
                 .allowCredentials(true)
                 .maxAge(3600);
     }
