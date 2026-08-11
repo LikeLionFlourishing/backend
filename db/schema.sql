@@ -610,12 +610,11 @@ CREATE TABLE care_results (
                 AND retry_used = FALSE
             )
         ),
-    CONSTRAINT ck_care_results_similarity
-        CHECK (
-            (similar_report_id IS NULL AND similarity_score IS NULL)
-            OR
-            (similar_report_id IS NOT NULL AND similarity_score >= 5)
-        ),
+    -- similar_report_id는 fk_care_results_similar_report의 ON DELETE SET NULL 대상이므로
+    -- MySQL 제약상 CHECK에 사용할 수 없다. 점수 하한만 DB에서 강제하고
+    -- similar_report_id와 similarity_score의 짝 맞춤은 서비스 계층 규칙 G에서 보장한다.
+    CONSTRAINT ck_care_results_similarity_score
+        CHECK (similarity_score IS NULL OR similarity_score >= 5),
     CONSTRAINT ck_care_results_summary_not_blank
         CHECK (CHAR_LENGTH(TRIM(summary)) > 0)
 ) ENGINE = InnoDB
@@ -969,6 +968,8 @@ CREATE INDEX ix_analytics_events_name_occurred
 -- G. care_results:
 --    result_type은 원 보고 result_type과 일치해야 하며 similar_report_id는
 --    같은 사용자, 과거 날짜, COMPLETED 상태, 유사도 5점 이상이어야 합니다.
+--    similar_report_id와 similarity_score는 항상 함께 NULL이거나 함께 값을 가져야 합니다.
+--    참조한 보고가 삭제되어 similar_report_id가 NULL이 되면 similarity_score도 NULL로 정리합니다.
 -- H. rule_sets / care_rule_versions:
 --    신규 결과에는 ACTIVE 규칙 세트의 APPROVED 규칙 버전만 적용합니다.
 -- I. care_result_items:
