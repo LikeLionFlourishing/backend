@@ -16,12 +16,17 @@ public class SecurityConfig {
             "/v3/api-docs/**"
     };
 
+    private static final String[] AUTHENTICATED_PATHS = {
+            "/v1/reference-data/**"
+    };
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(PUBLIC_PATHS).permitAll()
+                        .requestMatchers(AUTHENTICATED_PATHS).authenticated()
                         .anyRequest().denyAll()
                 )
                 .formLogin(formLogin -> formLogin.disable())
