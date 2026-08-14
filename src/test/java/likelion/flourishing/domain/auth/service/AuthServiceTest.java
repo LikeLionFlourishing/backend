@@ -17,6 +17,7 @@ import likelion.flourishing.domain.auth.dto.request.LoginRequest;
 import likelion.flourishing.domain.auth.dto.request.RegisterRequest;
 import likelion.flourishing.domain.auth.entity.User;
 import likelion.flourishing.domain.auth.repository.UserRepository;
+import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.global.config.AuthProperties;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
@@ -49,6 +50,8 @@ class AuthServiceTest {
     private static final String EMAIL = "soldier@example.com";
     private static final String PASSWORD = "correct-horse-battery-staple";
     private static final String CLIENT_IP = "127.0.0.1";
+    private static final UUID USER_ID = UUID.fromString("2c56fe08-ea1f-45fc-915d-c35b7c0bca39");
+    private static final LocalDateTime ONBOARDING_TIME = LocalDateTime.of(2026, 8, 14, 9, 0);
 
     @Mock
     private UserRepository userRepository;
@@ -153,6 +156,47 @@ class AuthServiceTest {
                 .isEqualTo(ErrorCode.INVALID_CREDENTIALS);
 
         verify(sessionService, never()).issue(any());
+    }
+
+    @Test
+    void completeSignupStampsCompletionTime() {
+        User user = persisted(User.register(EMAIL, "hashed"));
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+
+        LocalDateTime completedAt = authService.completeSignup(principal(), ONBOARDING_TIME);
+
+        assertThat(completedAt).isEqualTo(ONBOARDING_TIME);
+        assertThat(user.isSignupCompleted()).isTrue();
+    }
+
+    @Test
+    void completeSignupKeepsFirstCompletionTime() {
+        User user = persisted(User.register(EMAIL, "hashed"));
+        user.completeSignup(ONBOARDING_TIME);
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+
+        LocalDateTime completedAt = authService.completeSignup(principal(), ONBOARDING_TIME.plusDays(3));
+
+        assertThat(completedAt).isEqualTo(ONBOARDING_TIME);
+    }
+
+    @Test
+    void completeSignupRejectsUnknownUser() {
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.completeSignup(principal(), ONBOARDING_TIME))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.AUTHENTICATION_REQUIRED);
+    }
+
+    private AuthenticatedUser principal() {
+        return new AuthenticatedUser(
+                USER_ID,
+                UUID.randomUUID(),
+                LocalDateTime.of(2026, 8, 24, 0, 0),
+                "csrf-token-value-that-is-long-enough"
+        );
     }
 
     private void allowRateLimit() {

@@ -1,6 +1,7 @@
 package likelion.flourishing.domain.auth.service;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import likelion.flourishing.domain.auth.dto.request.LoginRequest;
 import likelion.flourishing.domain.auth.dto.request.RegisterRequest;
 import likelion.flourishing.domain.auth.dto.response.AuthSessionResponse;
@@ -97,6 +98,21 @@ public class AuthService {
     @Transactional
     public void logout(AuthenticatedUser principal) {
         sessionService.revoke(principal.sessionId());
+    }
+
+    /**
+     * 온보딩이 최초 설정을 마쳤을 때 호출한다. users는 auth가 소유하므로 다른 도메인이
+     * 엔티티를 직접 다루지 않고 이 메서드를 거친다.
+     *
+     * <p>이미 완료한 사용자를 다시 호출해도 최초 시각을 유지한다.
+     *
+     * @return 반영된 가입 완료 시각. 명세 Onboarding.completedAt 값이다.
+     */
+    @Transactional
+    public LocalDateTime completeSignup(AuthenticatedUser principal, LocalDateTime now) {
+        User user = findUser(principal);
+        user.completeSignup(now);
+        return user.getSignupCompletedAt();
     }
 
     /**
