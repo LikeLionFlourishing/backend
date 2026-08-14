@@ -1,0 +1,19 @@
+package likelion.flourishing.analytics.domain;
+
+/** 분석용으로 저장할 수 있는 사용자 행동 이름. DDL의 허용 목록과 같은 값을 유지한다. */
+public enum AnalyticsEventName {
+    ONBOARDING_COMPLETED,
+    REPORT_STARTED,
+    INPUT_ASSIST_OPENED,
+    AI_STRUCTURING_SUCCEEDED,
+    AI_STRUCTURING_FAILED,
+    REPORT_SUBMITTED,
+    CARE_RESULT_VIEWED,
+    FOLLOW_UP_SUBMITTED,
+    SIMILAR_EXPERIENCE_VIEWED;
+
+    public static final String ALLOWED_PATTERN =
+            "^(ONBOARDING_COMPLETED|REPORT_STARTED|INPUT_ASSIST_OPENED|AI_STRUCTURING_SUCCEEDED|"
+                    + "AI_STRUCTURING_FAILED|REPORT_SUBMITTED|CARE_RESULT_VIEWED|FOLLOW_UP_SUBMITTED|"
+                    + "SIMILAR_EXPERIENCE_VIEWED)$";
+}

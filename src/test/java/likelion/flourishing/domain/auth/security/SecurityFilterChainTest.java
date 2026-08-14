@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -73,6 +74,25 @@ class SecurityFilterChainTest {
                 .andExpect(jsonPath("$.status").value(401));
 
         verify(authService, never()).getMe(any());
+    }
+
+    @Test
+    void analyticsEventRequestWithoutSessionCookieIsUnauthorized() throws Exception {
+        mockMvc.perform(post("/v1/analytics-events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "events": [
+                                    {
+                                      "eventId": "0198a31f-f33f-7000-8000-000000000001",
+                                      "eventName": "REPORT_STARTED",
+                                      "occurredAt": "2026-08-15T03:00:00Z"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
     }
 
     @Test
