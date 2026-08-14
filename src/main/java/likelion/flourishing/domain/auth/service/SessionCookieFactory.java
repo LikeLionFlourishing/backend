@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * 명세의 세션 쿠키를 만들고 읽는다.
- * 발급 쿠키는 Max-Age 없이 내보내 브라우저 세션 쿠키로 두고, 만료 쿠키만 Max-Age=0으로 내린다.
+ * 발급 쿠키의 Max-Age는 세션 TTL과 같게 두어 브라우저를 닫아도 로그인이 유지되게 하고,
+ * 만료 쿠키만 Max-Age=0으로 내린다.
  */
 @Component
 public class SessionCookieFactory {
@@ -21,8 +22,14 @@ public class SessionCookieFactory {
         this.authProperties = authProperties;
     }
 
+    /**
+     * 세션 TTL과 같은 Max-Age를 실어 발급한다. DB 세션은 14일 남아 있는데 쿠키가 브라우저 종료로
+     * 사라지면 로그인 유지 계약이 깨지므로 두 만료를 같은 값으로 맞춘다.
+     */
     public ResponseCookie create(String sessionToken) {
-        return baseCookie(sessionToken).build();
+        return baseCookie(sessionToken)
+                .maxAge(authProperties.session().ttl())
+                .build();
     }
 
     public ResponseCookie clear() {
