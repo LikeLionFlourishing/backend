@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.List;
 import likelion.flourishing.domain.report.entity.Appearance;
 import likelion.flourishing.domain.report.entity.BodyArea;
 import likelion.flourishing.domain.report.entity.CareAvailability;
@@ -155,6 +156,34 @@ class OpenAiSkinReportStructuringTest {
         assertThat(appearanceEnum).hasSize(Appearance.values().length);
         assertThat(schema.getValue().path("additionalProperties").asBoolean(true)).isFalse();
         assertThat(schema.getValue().path("required")).hasSize(5);
+    }
+
+    /**
+     * 단일 선택 필드는 근거가 없으면 null이어야 한다.
+     *
+     * <p>enum이 값 전체를 목록으로 제한하므로 type에 null이 있어도 enum에 없으면 null을 쓸 수 없다.
+     * 그러면 문장에 근거가 없어도 모델이 아무 값이나 고르게 되고, 그 값이 사용자 화면의 기본 선택으로
+     * 올라간다.
+     */
+    @Test
+    void nullableSingleSelectionSchemaAllowsNull() {
+        stubPayload("""
+                {"primaryArea": null, "appearances": [], "sensations": [], "situations": [],
+                 "careAvailability": null}
+                """);
+        structuring.structure("확인용 문장");
+        ArgumentCaptor<ObjectNode> schema = ArgumentCaptor.forClass(ObjectNode.class);
+        verify(client).requestStructuredJson(
+                eq("skin_report_structuring"), schema.capture(), anyString(), anyString()
+        );
+
+        for (String field : List.of("primaryArea", "careAvailability")) {
+            JsonNode node = schema.getValue().path("properties").path(field);
+            assertThat(node.path("type")).extracting(JsonNode::asText).contains("string", "null");
+            assertThat(node.path("enum")).anyMatch(JsonNode::isNull);
+        }
+        assertThat(schema.getValue().path("properties").path("primaryArea").path("enum"))
+                .hasSize(BodyArea.values().length + 1);
     }
 
     private void stubPayload(String json) {

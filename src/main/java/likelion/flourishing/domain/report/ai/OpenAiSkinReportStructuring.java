@@ -168,15 +168,26 @@ public class OpenAiSkinReportStructuring implements SkinReportStructuringPort {
         return schema;
     }
 
+    /**
+     * 값이 없을 수도 있는 단일 선택 필드.
+     *
+     * <p>enum 목록에 null을 함께 넣는다. JSON Schema에서 enum은 값 전체를 그 목록으로 제한하므로,
+     * type이 null을 허용해도 enum에 없으면 null은 유효하지 않다. 그러면 근거가 없을 때 null로 두라는
+     * 지시를 모델이 지킬 방법이 없어져, 문장에 부위 이야기가 없어도 13개 중 하나를 고르게 된다.
+     * 그 값이 그대로 사용자 화면의 기본 선택으로 올라간다.
+     */
     private ObjectNode nullableEnum(Enum<?>[] values, String description) {
         ArrayNode types = objectMapper.createArrayNode();
         types.add("string");
         types.add("null");
 
+        ArrayNode allowed = enumValues(values);
+        allowed.addNull();
+
         ObjectNode node = objectMapper.createObjectNode();
         node.set("type", types);
         node.put("description", description);
-        node.set("enum", enumValues(values));
+        node.set("enum", allowed);
         return node;
     }
 

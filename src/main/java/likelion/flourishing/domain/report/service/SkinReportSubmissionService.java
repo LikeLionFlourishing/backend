@@ -160,16 +160,42 @@ public class SkinReportSubmissionService {
                 preCareChecks
         );
 
-        return skinReportWriter.write(
-                userId,
-                OPERATION_ID,
-                idempotencyKey,
-                fingerprint,
-                report,
-                plan,
-                similarExperience,
-                (savedReport, generated) -> toResponse(savedReport, request, generated, lookup)
-        );
+        try {
+            return skinReportWriter.write(
+                    userId,
+                    OPERATION_ID,
+                    idempotencyKey,
+                    fingerprint,
+                    report,
+                    plan,
+                    similarExperience,
+                    (savedReport, generated) -> toResponse(savedReport, request, generated, lookup)
+            );
+        } catch (BusinessException exception) {
+            return replayAfterConflict(userId, idempotencyKey, fingerprint, exception);
+        }
+    }
+
+    /**
+     * 하루 한 건 제약에 걸린 뒤, 같은 키의 다른 요청이 먼저 저장한 것인지 확인한다.
+     *
+     * <p>재전송 확인과 저장 사이에 같은 키의 요청이 겹치면 둘 다 처음 조회에서 빈 값을 본다. 뒤늦은
+     * 쪽은 (user_id, report_date) 유니크 제약에 걸리는데, 같은 키라면 명세대로 처음 응답이 나가야 하고
+     * 409는 맞지 않다. 쓰기 트랜잭션이 되돌아간 뒤 다시 읽으면 먼저 커밋된 멱등 기록이 보인다.
+     *
+     * <p>키가 다른 요청이 같은 날 두 번째 보고를 시도한 경우에는 기록이 없어 원래 409가 그대로 나간다.
+     */
+    private IdempotentResponse replayAfterConflict(
+            UUID userId,
+            UUID idempotencyKey,
+            Object fingerprint,
+            BusinessException conflict
+    ) {
+        if (conflict.getErrorCode() != ErrorCode.REPORT_ALREADY_EXISTS) {
+            throw conflict;
+        }
+        return idempotencyService.findReplay(userId, OPERATION_ID, idempotencyKey, fingerprint)
+                .orElseThrow(() -> conflict);
     }
 
     private SkinReportCreatedResponse toResponse(

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -178,6 +179,54 @@ class SkinReportSubmissionServiceTest {
 
         assertThat(response).isEqualTo(stored);
         verifyNothingWritten();
+    }
+
+    /**
+     * 같은 키의 두 요청이 겹치면 뒤늦은 쪽도 409가 아니라 처음 응답을 받아야 한다.
+     *
+     * <p>두 요청이 모두 재전송 확인에서 빈 값을 보고 진행하면, 뒤늦은 쪽은 하루 한 건 유니크 제약에
+     * 걸린다. 쓰기 트랜잭션이 되돌아간 뒤 다시 읽으면 먼저 커밋된 멱등 기록이 보인다.
+     */
+    @Test
+    void concurrentRequestWithTheSameKeyReplaysTheFirstResponse() {
+        IdempotentResponse stored = IdempotentResponse.replay(201, "{\"id\":\"stored\"}", null);
+        when(idempotencyService.findReplay(any(), any(), any(), any()))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(stored));
+        doThrow(new BusinessException(ErrorCode.REPORT_ALREADY_EXISTS))
+                .when(skinReportWriter).write(any(), any(), any(), any(), any(), any(), any(), any());
+
+        IdempotentResponse response = service.submit(
+                principal(), IDEMPOTENCY_KEY, request(List.of(PreCareCheck.NONE))
+        );
+
+        assertThat(response).isEqualTo(stored);
+    }
+
+    /** 키가 다른 요청이 같은 날 두 번째 보고를 시도한 경우에는 409가 그대로 나가야 한다. */
+    @Test
+    void conflictWithoutStoredResponseStaysConflict() {
+        when(idempotencyService.findReplay(any(), any(), any(), any())).thenReturn(Optional.empty());
+        doThrow(new BusinessException(ErrorCode.REPORT_ALREADY_EXISTS))
+                .when(skinReportWriter).write(any(), any(), any(), any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> service.submit(principal(), IDEMPOTENCY_KEY, request(List.of(PreCareCheck.NONE))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.REPORT_ALREADY_EXISTS);
+    }
+
+    /** 하루 한 건이 아닌 다른 도메인 오류는 재조회 없이 그대로 올라가야 한다. */
+    @Test
+    void otherBusinessErrorFromWriterIsNotSwallowed() {
+        when(idempotencyService.findReplay(any(), any(), any(), any())).thenReturn(Optional.empty());
+        doThrow(new BusinessException(ErrorCode.IDEMPOTENCY_KEY_REUSED))
+                .when(skinReportWriter).write(any(), any(), any(), any(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> service.submit(principal(), IDEMPOTENCY_KEY, request(List.of(PreCareCheck.NONE))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.IDEMPOTENCY_KEY_REUSED);
     }
 
     /** 24시간 보관이라 날짜가 지문에 없으면 자정을 넘긴 재시도가 어제 응답을 되돌려 준다. */
