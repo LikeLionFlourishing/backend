@@ -104,13 +104,17 @@ public class AuthService {
      * 온보딩이 최초 설정을 마쳤을 때 호출한다. users는 auth가 소유하므로 다른 도메인이
      * 엔티티를 직접 다루지 않고 이 메서드를 거친다.
      *
-     * <p>이미 완료한 사용자를 다시 호출해도 최초 시각을 유지한다.
+     * <p>이미 완료한 사용자를 다시 호출해도 최초 시각을 유지한다. 이 약속을 지키려고 행에 잠금을
+     * 걸고 읽는다. 잠그지 않으면 온보딩 완료 요청이 겹쳤을 때 두 트랜잭션이 모두
+     * signup_completed_at이 비어 있는 상태를 읽고 각자 다른 시각을 써서, 나중에 커밋한 쪽이
+     * 최초 시각을 덮어쓴다.
      *
      * @return 반영된 가입 완료 시각. 명세 Onboarding.completedAt 값이다.
      */
     @Transactional
     public LocalDateTime completeSignup(AuthenticatedUser principal, LocalDateTime now) {
-        User user = findUser(principal);
+        User user = userRepository.findByIdForUpdate(principal.userId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTHENTICATION_REQUIRED));
         user.completeSignup(now);
         return user.getSignupCompletedAt();
     }

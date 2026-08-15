@@ -161,7 +161,7 @@ class AuthServiceTest {
     @Test
     void completeSignupStampsCompletionTime() {
         User user = persisted(User.register(EMAIL, "hashed"));
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user));
 
         LocalDateTime completedAt = authService.completeSignup(principal(), ONBOARDING_TIME);
 
@@ -173,16 +173,31 @@ class AuthServiceTest {
     void completeSignupKeepsFirstCompletionTime() {
         User user = persisted(User.register(EMAIL, "hashed"));
         user.completeSignup(ONBOARDING_TIME);
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user));
 
         LocalDateTime completedAt = authService.completeSignup(principal(), ONBOARDING_TIME.plusDays(3));
 
         assertThat(completedAt).isEqualTo(ONBOARDING_TIME);
     }
 
+    /**
+     * 최초 시각을 유지한다는 약속은 잠금 없이는 성립하지 않는다. 잠그지 않고 읽으면 겹친 두 요청이
+     * 모두 비어 있는 상태를 읽어, 나중에 커밋한 쪽이 먼저 쓴 시각을 덮는다.
+     */
+    @Test
+    void completeSignupReadsUserWithRowLock() {
+        User user = persisted(User.register(EMAIL, "hashed"));
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user));
+
+        authService.completeSignup(principal(), ONBOARDING_TIME);
+
+        verify(userRepository).findByIdForUpdate(USER_ID);
+        verify(userRepository, never()).findById(USER_ID);
+    }
+
     @Test
     void completeSignupRejectsUnknownUser() {
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.completeSignup(principal(), ONBOARDING_TIME))
                 .isInstanceOf(BusinessException.class)
