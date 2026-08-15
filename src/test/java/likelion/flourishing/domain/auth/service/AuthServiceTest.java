@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -203,6 +204,50 @@ class AuthServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.AUTHENTICATION_REQUIRED);
+    }
+
+    /**
+     * 제3자가 남의 이메일로 창을 채워도 정당한 로그인을 막지 못해야 한다. 자격 증명을 확인하기
+     * 전에 이메일 창을 세면 이 요청이 429가 되어 계정이 잠긴다.
+     */
+    @Test
+    void loginWithCorrectPasswordIsNotBlockedByEmailWindow() {
+        User user = persisted(User.register(EMAIL, "hashed"));
+        when(userRepository.findByNormalizedEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(PASSWORD, "hashed")).thenReturn(true);
+
+        AuthSessionIssue issue = authService.login(new LoginRequest(EMAIL, PASSWORD), CLIENT_IP);
+
+        assertThat(issue.sessionToken()).isEqualTo("session-token");
+        verify(rateLimiter, never()).consume(eq("login-email"), anyString(), anyInt(), any(Duration.class));
+        verify(rateLimiter).reset("login-email", EMAIL);
+    }
+
+    /** 틀린 비밀번호만 창을 채운다. 대입 방어는 그대로 남는다. */
+    @Test
+    void failedLoginConsumesTheEmailWindow() {
+        User user = persisted(User.register(EMAIL, "hashed"));
+        when(userRepository.findByNormalizedEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), CLIENT_IP))
+                .isInstanceOf(BusinessException.class);
+
+        verify(rateLimiter).consume(eq("login-email"), eq(EMAIL), anyInt(), any(Duration.class));
+        verify(rateLimiter, never()).reset(anyString(), anyString());
+    }
+
+    /** 없는 이메일로 실패해도 같은 창을 쓴다. 응답은 여전히 INVALID_CREDENTIALS다. */
+    @Test
+    void failedLoginForUnknownEmailAlsoConsumesTheWindow() {
+        when(userRepository.findByNormalizedEmail(anyString())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), CLIENT_IP))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_CREDENTIALS);
+
+        verify(rateLimiter).consume(eq("login-email"), eq(EMAIL), anyInt(), any(Duration.class));
     }
 
     private AuthenticatedUser principal() {

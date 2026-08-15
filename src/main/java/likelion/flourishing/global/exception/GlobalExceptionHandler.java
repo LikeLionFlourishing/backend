@@ -12,6 +12,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -104,13 +107,58 @@ public class GlobalExceptionHandler {
         return problem(ErrorCode.BAD_REQUEST, request, null);
     }
 
+    /**
+     * Spring MVC가 4xx로 정의한 예외들. 이 클래스가 {@code ResponseEntityExceptionHandler}를
+     * 상속하지 않고 아래 Exception 캐치올을 두고 있어, 따로 받지 않으면 전부 500으로 나간다.
+     *
+     * <ul>
+     *   <li>405 — 매핑되지 않은 메서드. {@code PUT /v1/me}처럼 경로만 열려 있는 자리에서 난다.
+     *   <li>415 — Content-Type이 없거나 지원하지 않는 요청.
+     *   <li>403 — 컨트롤러 안에서 난 접근 거부. {@link ProblemAccessDeniedHandler}는 필터 단계에서
+     *       걸린 거부만 처리하므로 메서드 보안을 쓰기 시작하면 이쪽이 필요하다.
+     * </ul>
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException exception,
+            HttpServletRequest request
+    ) {
+        return problem(ErrorCode.METHOD_NOT_ALLOWED, request, null);
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(
+            HttpMediaTypeNotSupportedException exception,
+            HttpServletRequest request
+    ) {
+        return problem(ErrorCode.UNSUPPORTED_MEDIA_TYPE, request, null);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(
+            AccessDeniedException exception,
+            HttpServletRequest request
+    ) {
+        return problem(ErrorCode.ACCESS_DENIED, request, null);
+    }
+
+    /**
+     * 예상 못 한 오류. 응답에는 내부 정보를 담지 않지만 로그에는 스택 트레이스를 남긴다.
+     * 응답에서 감추는 것과 로그에서 감추는 것은 별개이고, 스택이 없으면 운영에서 어느 코드가
+     * 터졌는지 알 방법이 없다.
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpectedException(
             Exception exception,
             HttpServletRequest request
     ) {
         String requestId = problemFactory.resolveRequestId(request);
-        log.error("Unhandled exception requestId={} type={}", requestId, exception.getClass().getName());
+        log.error(
+                "Unhandled exception requestId={} type={}",
+                requestId,
+                exception.getClass().getName(),
+                exception
+        );
         return problem(ErrorCode.INTERNAL_SERVER_ERROR, request, null);
     }
 

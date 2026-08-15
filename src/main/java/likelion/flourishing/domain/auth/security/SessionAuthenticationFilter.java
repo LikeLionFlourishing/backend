@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import likelion.flourishing.domain.auth.service.SessionCookieFactory;
 import likelion.flourishing.domain.auth.service.SessionService;
 import likelion.flourishing.global.exception.BusinessException;
@@ -22,6 +23,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String CSRF_HEADER = "X-CSRF-Token";
+
+    /**
+     * 세션 쿠키를 아예 보지 않는 경로.
+     *
+     * <p>가입과 로그인은 인증이 필요 없는데도 상태를 바꾸는 POST라, 브라우저에 살아 있는 세션
+     * 쿠키가 남아 있으면 CSRF 검사에 걸려 403이 됐다. 로그인 화면을 다시 제출하는 흐름이
+     * 원인을 알 수 없는 실패로 끝난다. 인증을 요구하지 않는 경로는 쿠키를 무시한다.
+     */
+    private static final Set<String> ANONYMOUS_ENDPOINTS = Set.of("POST /v1/users", "POST /v1/sessions");
 
     private final SessionService sessionService;
     private final SessionCookieFactory sessionCookieFactory;
@@ -43,6 +53,11 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
+        if (isAnonymousEndpoint(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         Optional<String> sessionToken = sessionCookieFactory.readToken(request);
 
         if (sessionToken.isPresent() && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -58,6 +73,10 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isAnonymousEndpoint(HttpServletRequest request) {
+        return ANONYMOUS_ENDPOINTS.contains(request.getMethod() + " " + request.getRequestURI());
     }
 
     private void setAuthentication(AuthenticatedUser principal) {
