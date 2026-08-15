@@ -56,13 +56,13 @@ public class NotificationSettingsService {
     }
 
     /**
-     * 사용 여부와 브라우저 권한 상태를 저장한다.
+     * 알림 사용 여부만 저장한다.
      *
-     * <p>permissionState를 보내지 않으면 저장된 값을 그대로 둔다. 알림을 끄고 켜는 요청과
-     * 브라우저 권한이 바뀐 사실을 알리는 요청이 서로 다른 시점에 오기 때문이다.
+     * <p>브라우저 권한 상태는 이 요청으로 바꾸지 않는다. 명세의 요청 본문에 enabled 하나만
+     * 정의되어 있고, 권한은 온보딩에서 받는다. 저장된 권한은 그대로 유지한다.
      *
-     * <p>알림을 켜겠다는 의사와 브라우저 권한은 별개라 enabled = true, permissionState = DENIED
-     * 조합도 그대로 저장한다. 실제 발송은 활성 구독 유무로 다시 걸러진다.
+     * <p>알림을 켜겠다는 의사와 브라우저 권한은 별개라 enabled = true, permission = DENIED
+     * 조합도 그대로 남는다. 실제 발송은 활성 구독 유무로 다시 걸러진다.
      */
     @Transactional
     public NotificationSettingsResponse updateSettings(
@@ -72,12 +72,9 @@ public class NotificationSettingsService {
         UUID userId = principal.userId();
         NotificationSetting setting = notificationSettingRepository.findById(userId)
                 .orElseGet(() -> NotificationSetting.create(
-                        userId, request.enabled(), permissionOrDefault(request.permissionState())
+                        userId, request.enabled(), NotificationPermission.DEFAULT
                 ));
-        setting.update(
-                request.enabled(),
-                request.permissionState() == null ? setting.getPermissionState() : request.permissionState()
-        );
+        setting.update(request.enabled(), setting.getPermissionState());
 
         NotificationSetting saved = notificationSettingRepository.saveAndFlush(setting);
         return toResponse(saved, pushSubscriptionRepository.countByUserIdAndActiveIsTrue(userId));
@@ -91,9 +88,5 @@ public class NotificationSettingsService {
                 setting.getPermissionState(),
                 activeSubscriptions
         );
-    }
-
-    private NotificationPermission permissionOrDefault(NotificationPermission permission) {
-        return permission == null ? NotificationPermission.DEFAULT : permission;
     }
 }

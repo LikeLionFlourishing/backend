@@ -1,8 +1,9 @@
 package likelion.flourishing.domain.notification.service;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,11 +55,7 @@ public class PushSubscriptionService {
     }
 
     @Transactional
-    public SavedPushSubscription register(
-            AuthenticatedUser principal,
-            RegisterPushSubscriptionRequest request,
-            String userAgent
-    ) {
+    public SavedPushSubscription register(AuthenticatedUser principal, RegisterPushSubscriptionRequest request) {
         String endpoint = requireAllowedEndpoint(request.endpoint());
         byte[] userAgentPublicKey = requirePublicKey(request.keys().p256dh());
         byte[] authSecret = requireAuthSecret(request.keys().auth());
@@ -68,7 +65,7 @@ public class PushSubscriptionService {
         byte[] endpointCiphertext = pushSecretCipher.encryptText(endpoint);
         byte[] publicKeyCiphertext = pushSecretCipher.encrypt(userAgentPublicKey);
         byte[] authCiphertext = pushSecretCipher.encrypt(authSecret);
-        String storedUserAgent = normalizeUserAgent(userAgent);
+        String storedUserAgent = normalizeUserAgent(request.userAgent());
         LocalDateTime expiresAt = toExpiresAt(request.expirationTime());
 
         Optional<PushSubscription> existing =
@@ -157,6 +154,7 @@ public class PushSubscriptionService {
         }
     }
 
+    /** 길이는 @Size가 이미 걸렀지만, 컬럼 길이를 넘기지 않도록 저장 직전에 한 번 더 자른다. */
     private String normalizeUserAgent(String userAgent) {
         if (userAgent == null || userAgent.isBlank()) {
             return UNKNOWN_USER_AGENT;
@@ -166,10 +164,20 @@ public class PushSubscriptionService {
                 : userAgent.substring(0, MAX_USER_AGENT_LENGTH);
     }
 
-    /** 브라우저가 알려 준 만료 시각(epoch 밀리초)을 UTC로 바꾼다. 대부분 값이 없다. */
-    private LocalDateTime toExpiresAt(Long expirationTime) {
-        return expirationTime == null
-                ? null
-                : LocalDateTime.ofInstant(Instant.ofEpochMilli(expirationTime), ZoneOffset.UTC);
+    /**
+     * 브라우저가 알려 준 만료 시각을 UTC로 바꿔 저장한다. 대부분 값이 없다.
+     *
+     * <p>명세가 date-time 문자열이라 여기서 파싱한다. 브라우저 구독 JSON의 숫자 타임스탬프를
+     * 그대로 보내면 형식 오류로 거부해, 잘못된 연도가 조용히 저장되지 않게 한다.
+     */
+    private LocalDateTime toExpiresAt(String expirationTime) {
+        if (expirationTime == null || expirationTime.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(expirationTime).withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        } catch (DateTimeParseException exception) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        }
     }
 }

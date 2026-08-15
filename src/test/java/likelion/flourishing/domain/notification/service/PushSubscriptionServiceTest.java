@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.interfaces.ECPublicKey;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
@@ -84,7 +83,7 @@ class PushSubscriptionServiceTest {
         when(pushSubscriptionRepository.findByUserIdAndEndpointFingerprint(eq(USER_ID), any()))
                 .thenReturn(Optional.empty());
 
-        SavedPushSubscription saved = service.register(principal(), request(null), USER_AGENT);
+        SavedPushSubscription saved = service.register(principal(), request(null, USER_AGENT));
 
         ArgumentCaptor<PushSubscription> captor = ArgumentCaptor.forClass(PushSubscription.class);
         verify(pushSubscriptionRepository).saveAndFlush(captor.capture());
@@ -103,7 +102,7 @@ class PushSubscriptionServiceTest {
         when(pushSubscriptionRepository.findByUserIdAndEndpointFingerprint(eq(USER_ID), any()))
                 .thenReturn(Optional.empty());
 
-        SavedPushSubscription saved = service.register(principal(), request(null), USER_AGENT);
+        SavedPushSubscription saved = service.register(principal(), request(null, USER_AGENT));
 
         assertThat(saved.response().getEndpointFingerprint())
                 .isEqualTo(EndpointFingerprint.toHex(endpointFingerprint.of(ENDPOINT)));
@@ -116,7 +115,7 @@ class PushSubscriptionServiceTest {
         when(pushSubscriptionRepository.findByUserIdAndEndpointFingerprint(eq(USER_ID), any()))
                 .thenReturn(Optional.of(existing));
 
-        SavedPushSubscription saved = service.register(principal(), request(null), "Chrome/130");
+        SavedPushSubscription saved = service.register(principal(), request(null, "Chrome/130"));
 
         assertThat(saved.created()).isFalse();
         assertThat(existing.getUserAgent()).isEqualTo("Chrome/130");
@@ -131,7 +130,7 @@ class PushSubscriptionServiceTest {
         when(pushSubscriptionRepository.findByUserIdAndEndpointFingerprint(eq(USER_ID), any()))
                 .thenReturn(Optional.of(existing));
 
-        service.register(principal(), request(null), USER_AGENT);
+        service.register(principal(), request(null, USER_AGENT));
 
         assertThat(existing.isActive()).isTrue();
     }
@@ -141,9 +140,7 @@ class PushSubscriptionServiceTest {
         when(pushSubscriptionRepository.findByUserIdAndEndpointFingerprint(eq(USER_ID), any()))
                 .thenReturn(Optional.empty());
 
-        long expirationTime = Instant.parse("2026-09-01T00:00:00Z").toEpochMilli();
-
-        service.register(principal(), request(expirationTime), USER_AGENT);
+        service.register(principal(), request("2026-09-01T09:00:00+09:00", USER_AGENT));
 
         ArgumentCaptor<PushSubscription> captor = ArgumentCaptor.forClass(PushSubscription.class);
         verify(pushSubscriptionRepository).saveAndFlush(captor.capture());
@@ -157,7 +154,7 @@ class PushSubscriptionServiceTest {
         when(pushSubscriptionRepository.findByUserIdAndEndpointFingerprint(eq(USER_ID), any()))
                 .thenReturn(Optional.empty());
 
-        service.register(principal(), request(null), "x".repeat(1000));
+        service.register(principal(), request(null, "x".repeat(1000)));
 
         ArgumentCaptor<PushSubscription> captor = ArgumentCaptor.forClass(PushSubscription.class);
         verify(pushSubscriptionRepository).saveAndFlush(captor.capture());
@@ -170,7 +167,7 @@ class PushSubscriptionServiceTest {
         when(pushSubscriptionRepository.findByUserIdAndEndpointFingerprint(eq(USER_ID), any()))
                 .thenReturn(Optional.empty());
 
-        service.register(principal(), request(null), null);
+        service.register(principal(), request(null, null));
 
         ArgumentCaptor<PushSubscription> captor = ArgumentCaptor.forClass(PushSubscription.class);
         verify(pushSubscriptionRepository).saveAndFlush(captor.capture());
@@ -178,13 +175,36 @@ class PushSubscriptionServiceTest {
         assertThat(captor.getValue().getUserAgent()).isEqualTo("unknown");
     }
 
+    /** 브라우저 구독 JSON의 숫자 타임스탬프를 그대로 보내면 거부한다. 조용히 엉뚱한 연도로 저장되면 안 된다. */
+    @Test
+    void numericExpirationTimeIsRejected() {
+        assertThatThrownBy(() -> service.register(principal(), request("1788220800000", USER_AGENT)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+        verify(pushSubscriptionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void blankExpirationTimeIsStoredAsNull() {
+        when(pushSubscriptionRepository.findByUserIdAndEndpointFingerprint(eq(USER_ID), any()))
+                .thenReturn(Optional.empty());
+
+        service.register(principal(), request("", USER_AGENT));
+
+        ArgumentCaptor<PushSubscription> captor = ArgumentCaptor.forClass(PushSubscription.class);
+        verify(pushSubscriptionRepository).saveAndFlush(captor.capture());
+
+        assertThat(captor.getValue().getExpiresAt()).isNull();
+    }
+
     @Test
     void nonHttpsEndpointIsRejected() {
         RegisterPushSubscriptionRequest request = new RegisterPushSubscriptionRequest(
-                "http://push.example.net/push/abc", null, new PushSubscriptionKeysRequest(p256dh, AUTH)
+                "http://push.example.net/push/abc", null, new PushSubscriptionKeysRequest(p256dh, AUTH), USER_AGENT
         );
 
-        assertThatThrownBy(() -> service.register(principal(), request, USER_AGENT))
+        assertThatThrownBy(() -> service.register(principal(), request))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
@@ -196,10 +216,10 @@ class PushSubscriptionServiceTest {
         byte[] tampered = decode(p256dh);
         tampered[64] ^= 1;
         RegisterPushSubscriptionRequest request = new RegisterPushSubscriptionRequest(
-                ENDPOINT, null, new PushSubscriptionKeysRequest(encode(tampered), AUTH)
+                ENDPOINT, null, new PushSubscriptionKeysRequest(encode(tampered), AUTH), USER_AGENT
         );
 
-        assertThatThrownBy(() -> service.register(principal(), request, USER_AGENT))
+        assertThatThrownBy(() -> service.register(principal(), request))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
@@ -208,10 +228,10 @@ class PushSubscriptionServiceTest {
     @Test
     void authSecretWithWrongLengthIsRejected() {
         RegisterPushSubscriptionRequest request = new RegisterPushSubscriptionRequest(
-                ENDPOINT, null, new PushSubscriptionKeysRequest(p256dh, encode(new byte[8]))
+                ENDPOINT, null, new PushSubscriptionKeysRequest(p256dh, encode(new byte[8])), USER_AGENT
         );
 
-        assertThatThrownBy(() -> service.register(principal(), request, USER_AGENT))
+        assertThatThrownBy(() -> service.register(principal(), request))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
@@ -220,10 +240,10 @@ class PushSubscriptionServiceTest {
     @Test
     void keysThatAreNotBase64AreRejected() {
         RegisterPushSubscriptionRequest request = new RegisterPushSubscriptionRequest(
-                ENDPOINT, null, new PushSubscriptionKeysRequest("이건 base64가 아닙니다", AUTH)
+                ENDPOINT, null, new PushSubscriptionKeysRequest("이건 base64가 아닙니다", AUTH), USER_AGENT
         );
 
-        assertThatThrownBy(() -> service.register(principal(), request, USER_AGENT))
+        assertThatThrownBy(() -> service.register(principal(), request))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.VALIDATION_ERROR);
@@ -238,9 +258,8 @@ class PushSubscriptionServiceTest {
         SavedPushSubscription saved = service.register(
                 principal(),
                 new RegisterPushSubscriptionRequest(
-                        ENDPOINT, null, new PushSubscriptionKeysRequest(standardBase64, AUTH)
-                ),
-                USER_AGENT
+                        ENDPOINT, null, new PushSubscriptionKeysRequest(standardBase64, AUTH), USER_AGENT
+                )
         );
 
         assertThat(saved.created()).isTrue();
@@ -281,9 +300,9 @@ class PushSubscriptionServiceTest {
         );
     }
 
-    private RegisterPushSubscriptionRequest request(Long expirationTime) {
+    private RegisterPushSubscriptionRequest request(String expirationTime, String userAgent) {
         return new RegisterPushSubscriptionRequest(
-                ENDPOINT, expirationTime, new PushSubscriptionKeysRequest(p256dh, AUTH)
+                ENDPOINT, expirationTime, new PushSubscriptionKeysRequest(p256dh, AUTH), userAgent
         );
     }
 

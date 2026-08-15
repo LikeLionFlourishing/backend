@@ -63,15 +63,15 @@ Content-Type: application/json
 요청:
 
 ```json
-{ "enabled": true, "permissionState": "GRANTED" }
+{ "enabled": true }
 ```
 
-- `enabled`는 필수입니다. 빠지면 422 `VALIDATION_ERROR`입니다.
-- `permissionState`는 선택입니다. 보내지 않으면 서버에 저장된 값을 그대로 둡니다.
-  브라우저 권한 상태가 바뀐 시점에만 함께 보내면 됩니다.
+- 본문에 정의된 필드는 `enabled` 하나뿐입니다. 빠지면 422 `VALIDATION_ERROR`입니다.
+- 브라우저 권한 상태(`permission`)는 이 요청으로 바꾸지 않습니다. 온보딩(`PUT /v1/me/onboarding`)의
+  `notificationPermission`으로 보내십시오. 이 본문에 넣으면 400 `BAD_REQUEST`입니다.
 - 시각과 시간대는 바꿀 수 없습니다. `time` 같은 필드를 넣으면 400 `BAD_REQUEST`입니다.
   정의되지 않은 필드는 모두 거부합니다.
-- `enabled: true`와 `permissionState: "DENIED"` 조합도 그대로 저장됩니다. 알림을 켜겠다는 의사와
+- `enabled: true`와 `permission: "DENIED"` 조합도 그대로 남습니다. 알림을 켜겠다는 의사와
   브라우저 권한은 별개로 다룹니다.
 - 응답 본문은 조회와 같은 형식입니다.
 
@@ -83,18 +83,25 @@ X-CSRF-Token: <토큰>
 Content-Type: application/json
 ```
 
-요청은 브라우저 `PushSubscription.toJSON()` 결과를 그대로 보내면 됩니다.
+요청 본문은 브라우저 `PushSubscription.toJSON()`에서 **두 군데를 바꿔** 보냅니다.
 
 ```json
 {
-  "endpoint": "https://push.example.net/push/JzLQ3raZJfFBR0aqvOMsLrt54w4rJUsV",
+  "endpoint": "https://fcm.googleapis.com/fcm/send/JzLQ3raZJfFBR0aqvOMsLrt54w4rJUsV",
   "expirationTime": null,
   "keys": {
     "p256dh": "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4",
     "auth": "BTBZMqHH6r4Tts7J_aSIgg"
-  }
+  },
+  "userAgent": "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15"
 }
 ```
+
+- `expirationTime`은 **ISO 8601 date-time 문자열 또는 null**입니다. 브라우저가 주는 숫자
+  타임스탬프를 그대로 보내면 422 `VALIDATION_ERROR`입니다. 값이 있으면
+  `new Date(subscription.expirationTime).toISOString()`으로 변환해 주십시오.
+- `userAgent`는 **필수**이고 본문에 담습니다. `navigator.userAgent`를 그대로 넣으면 됩니다.
+  서버는 `User-Agent` 헤더를 읽지 않습니다.
 
 응답 201(신규) 또는 200(같은 endpoint 재등록):
 
@@ -112,8 +119,6 @@ Content-Type: application/json
   성공으로 처리하시면 됩니다.
 - 응답에 endpoint 원문과 키는 없습니다. 되짚을 수 없는 지문만 내려갑니다.
   구독 해제에는 `id`를 쓰십시오.
-- `expirationTime`은 숫자(epoch 밀리초) 또는 `null`입니다. 대부분 `null`입니다.
-- `userAgent`는 본문에 담지 않습니다. 서버가 `User-Agent` 헤더에서 읽어 저장합니다.
 - `User-Agent` 헤더는 서버가 기기 구분용으로 저장합니다. 별도로 넣을 것은 없습니다.
 
 ## 4. Push 구독 해제
@@ -155,7 +160,6 @@ await fetch('/v1/me/notification-settings', {
   headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
   body: JSON.stringify({
     enabled: permission === 'granted',
-    permissionState: permission.toUpperCase(), // GRANTED | DENIED | DEFAULT
   }),
 });
 
@@ -172,7 +176,7 @@ if (permission === 'granted') {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-    body: JSON.stringify(subscription.toJSON()),
+    body: JSON.stringify(toRequestBody(subscription)),
   });
 }
 ```
@@ -212,8 +216,6 @@ Service Worker의 `push` 이벤트로 아래 JSON이 도착합니다.
 
 ## 참고
 
-- 요청 본문은 `PushSubscription.toJSON()` 결과 그대로입니다. `expirationTime`은 숫자(epoch 밀리초)
-  또는 `null`이고 `userAgent`는 본문에 담지 않습니다. 서버가 `User-Agent` 헤더에서 읽습니다.
 - 구독이 만료되어 Push 서비스가 `404` 또는 `410`을 돌려주면 서버가 그 구독을 비활성으로 내립니다.
   이후 `activeSubscriptionCount`가 줄어드니, 값이 0이면 재구독을 안내해 주십시오.
 - Swagger UI에서 실제 스키마를 확인할 수 있습니다: `http://localhost:8080/swagger-ui.html`
