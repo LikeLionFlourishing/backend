@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -34,6 +35,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -67,9 +69,12 @@ class HomeServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 저장 단계는 진짜 DailyCheckInWriter를 쓰고 저장소만 가짜로 둔다. 두 클래스를 나눈 것은
+        // 트랜잭션 경계 때문이지 규칙이 갈린 것이 아니라, 저장 규칙 검증은 이어서 하는 편이 낫다.
         homeService = new HomeService(
                 dailyCheckInRepository,
                 homeReportQueryRepository,
+                new DailyCheckInWriter(dailyCheckInRepository),
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );
         when(homeReportQueryRepository.findOldestPendingFollowUp(any(), any())).thenReturn(Optional.empty());
@@ -197,6 +202,62 @@ class HomeServiceTest {
                 .isEqualTo(ErrorCode.CHECK_IN_ALREADY_REPORTED);
 
         verify(dailyCheckInRepository, never()).saveAndFlush(any());
+    }
+
+    /**
+     * 같은 사용자의 첫 저장이 겹치면 둘 다 저장된 것이 없다고 보고 각자 넣으려 한다. 뒤늦은 쪽은
+     * uq_daily_check_ins_user_date에 걸리는데, 되돌아간 뒤 다시 읽으면 먼저 저장된 값이 보인다.
+     * 재시도가 없으면 이 자리가 그대로 500이 된다.
+     */
+    @Test
+    void saveReturnsFirstWriterResultWhenConcurrentInsertLoses() {
+        DailyCheckIn winner = persisted(DailyCheckIn.noDiscomfort(USER_ID, SEOUL_TODAY));
+        when(dailyCheckInRepository.findByUserIdAndCheckInDate(USER_ID, SEOUL_TODAY))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(dailyCheckInRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("uq_daily_check_ins_user_date"));
+
+        SavedDailyCheckIn saved = homeService.saveNoDiscomfort(principal(), SEOUL_TODAY, noDiscomfortRequest());
+
+        assertThat(saved.created()).isFalse();
+        assertThat(saved.response().getState()).isEqualTo(CheckInState.NO_DISCOMFORT);
+        verify(dailyCheckInRepository, times(1)).saveAndFlush(any());
+    }
+
+    /** 겹친 사이에 같은 날 피부 보고가 확정됐다면 다시 읽은 값이 SKIN_REPORT라 409가 나간다. */
+    @Test
+    void saveReturnsConflictWhenSkinReportWonTheRace() {
+        DailyCheckIn reported = persisted(DailyCheckIn.noDiscomfort(USER_ID, SEOUL_TODAY));
+        ReflectionTestUtils.setField(reported, "state", CheckInState.SKIN_REPORT);
+        ReflectionTestUtils.setField(reported, "reportId", REPORT_ID);
+        when(dailyCheckInRepository.findByUserIdAndCheckInDate(USER_ID, SEOUL_TODAY))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(reported));
+        when(dailyCheckInRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("uq_daily_check_ins_user_date"));
+
+        assertThatThrownBy(() -> homeService.saveNoDiscomfort(principal(), SEOUL_TODAY, noDiscomfortRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CHECK_IN_ALREADY_REPORTED);
+    }
+
+    /**
+     * 아직 입력할 수 없는 경과도 홈 최우선으로 보여 준다. 명세 PendingFollowUp이 availableFrom을
+     * 필수로 담는 이유가 이것이고, 언제부터 쓸 수 있는지는 프런트가 그 값으로 판단한다.
+     * 정책이 "입력 가능한 것만 보여 준다"로 바뀌면 이 테스트가 먼저 깨진다.
+     */
+    @Test
+    void pendingFollowUpIsShownBeforeItBecomesSubmittable() {
+        when(homeReportQueryRepository.findOldestPendingFollowUp(any(), any()))
+                .thenReturn(Optional.of(pendingFollowUpRow()));
+
+        HomeResponse response = homeService.getHome(principal());
+
+        assertThat(response.getPriority()).isEqualTo(HomePriority.FOLLOW_UP);
+        assertThat(response.getPendingFollowUp().getAvailableFrom())
+                .isAfter(NOW.atOffset(ZoneOffset.UTC));
     }
 
     private AuthenticatedUser principal() {

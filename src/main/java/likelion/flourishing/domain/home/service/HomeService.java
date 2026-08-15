@@ -4,7 +4,6 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.Optional;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.home.dto.request.SaveDailyCheckInRequest;
@@ -12,13 +11,13 @@ import likelion.flourishing.domain.home.dto.response.DailyCheckInResponse;
 import likelion.flourishing.domain.home.dto.response.HomeResponse;
 import likelion.flourishing.domain.home.dto.response.PendingFollowUpResponse;
 import likelion.flourishing.domain.home.dto.response.SkinReportSummaryResponse;
-import likelion.flourishing.domain.home.entity.DailyCheckIn;
 import likelion.flourishing.domain.home.entity.HomePriority;
 import likelion.flourishing.domain.home.repository.DailyCheckInRepository;
 import likelion.flourishing.domain.home.repository.HomeReportQueryRepository;
 import likelion.flourishing.domain.home.repository.HomeReportQueryRepository.RecentReportRow;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,15 +33,18 @@ public class HomeService {
 
     private final DailyCheckInRepository dailyCheckInRepository;
     private final HomeReportQueryRepository homeReportQueryRepository;
+    private final DailyCheckInWriter dailyCheckInWriter;
     private final Clock clock;
 
     public HomeService(
             DailyCheckInRepository dailyCheckInRepository,
             HomeReportQueryRepository homeReportQueryRepository,
+            DailyCheckInWriter dailyCheckInWriter,
             Clock clock
     ) {
         this.dailyCheckInRepository = dailyCheckInRepository;
         this.homeReportQueryRepository = homeReportQueryRepository;
+        this.dailyCheckInWriter = dailyCheckInWriter;
         this.clock = clock;
     }
 
@@ -80,8 +82,11 @@ public class HomeService {
      *
      * <p>확인 순서가 중요하다. 날짜와 상태를 먼저 보고, 그다음에 이미 저장된 값을 본다.
      * 잘못된 요청이 DB 조회까지 가지 않게 하려는 것이다.
+     *
+     * <p>트랜잭션은 저장 단계에만 건다. 같은 사용자의 첫 요청이 겹치면 둘 다 저장된 것이 없다고
+     * 보고 각자 넣으려다 뒤늦은 쪽이 uq_daily_check_ins_user_date에 걸리는데, 그 트랜잭션이
+     * 되돌아간 뒤 다시 읽어야 먼저 저장된 값이 보인다.
      */
-    @Transactional
     public SavedDailyCheckIn saveNoDiscomfort(
             AuthenticatedUser principal,
             LocalDate date,
@@ -95,18 +100,13 @@ public class HomeService {
         }
 
         UUID userId = principal.userId();
-        Optional<DailyCheckIn> existing = dailyCheckInRepository.findByUserIdAndCheckInDate(userId, date);
-        if (existing.isPresent()) {
-            DailyCheckIn checkIn = existing.get();
-            // 같은 날 피부 보고가 확정되면 서버가 상태를 SKIN_REPORT로 바꾼다. 되돌릴 수 없다.
-            if (!checkIn.isNoDiscomfort()) {
-                throw new BusinessException(ErrorCode.CHECK_IN_ALREADY_REPORTED);
-            }
-            return new SavedDailyCheckIn(DailyCheckInResponse.from(checkIn), false);
+        try {
+            return dailyCheckInWriter.saveNoDiscomfort(userId, date);
+        } catch (DataIntegrityViolationException raced) {
+            // 재시도는 한 번뿐이다. 두 번째도 제약에 걸리면 원인이 경합이 아니라는 뜻이다.
+            // 그 사이 같은 날 피부 보고가 확정됐다면 다시 읽은 값이 SKIN_REPORT라 409가 나간다.
+            return dailyCheckInWriter.saveNoDiscomfort(userId, date);
         }
-
-        DailyCheckIn saved = dailyCheckInRepository.saveAndFlush(DailyCheckIn.noDiscomfort(userId, date));
-        return new SavedDailyCheckIn(DailyCheckInResponse.from(saved), true);
     }
 
     private LocalDate today() {
