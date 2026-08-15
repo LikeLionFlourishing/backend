@@ -10,8 +10,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
-import likelion.flourishing.domain.home.entity.DailyCheckIn;
-import likelion.flourishing.domain.home.repository.DailyCheckInRepository;
 import likelion.flourishing.domain.report.crypto.ReportTextCipher;
 import likelion.flourishing.domain.report.dto.request.ConfirmedSelectionsRequest;
 import likelion.flourishing.domain.report.dto.request.CreateSkinReportRequest;
@@ -35,14 +33,17 @@ import likelion.flourishing.domain.report.similarity.SimilarExperienceQuery;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 사용자가 확정한 보고를 저장하고 관리 결과를 함께 만든다.
  *
- * <p>보고와 결과를 한 트랜잭션에서 만든다. 결과 없는 보고가 남으면 기록 상세 조회가 불변식 위반이
- * 되고, 하루 한 건 제약 때문에 사용자가 그날 다시 보고할 수도 없다. 규칙이 준비되지 않아 503이
- * 나가는 경우에도 보고는 저장되지 않는다.
+ * <p>이 메서드에는 트랜잭션을 걸지 않는다. 규칙 조회와 AI 호출까지 끝낸 다음 저장만
+ * {@link SkinReportWriter}에 맡긴다. 외부 호출을 쓰기 트랜잭션 안에 두면 보고 유니크 인덱스 락과
+ * DB 커넥션을 응답이 올 때까지 붙잡아, 같은 사용자의 다음 요청이 그만큼 기다리고 커넥션 풀도
+ * 빨리 마른다.
+ *
+ * <p>저장은 한 트랜잭션에서 함께 끝난다. 규칙이 준비되지 않아 503이 나가는 경우는 저장을 시작하기
+ * 전이라 아무것도 남지 않는다.
  *
  * <p>결과 유형과 보고 날짜는 요청에서 받지 않고 서버가 정한다. 저장하는 값은 사용자가 최종 확인한
  * 선택값뿐이다.
@@ -57,32 +58,32 @@ public class SkinReportSubmissionService {
     public static final String OPERATION_ID = "POST /v1/skin-reports";
 
     private final SkinReportRepository skinReportRepository;
-    private final DailyCheckInRepository dailyCheckInRepository;
     private final ReportTextCipher reportTextCipher;
     private final SimilarExperienceFinder similarExperienceFinder;
     private final CareResultGenerator careResultGenerator;
     private final CareGuideResponseAssembler careGuideResponseAssembler;
+    private final SkinReportWriter skinReportWriter;
     private final IdempotencyService idempotencyService;
     private final SensitiveDataConsentGuard consentGuard;
     private final Clock clock;
 
     public SkinReportSubmissionService(
             SkinReportRepository skinReportRepository,
-            DailyCheckInRepository dailyCheckInRepository,
             ReportTextCipher reportTextCipher,
             SimilarExperienceFinder similarExperienceFinder,
             CareResultGenerator careResultGenerator,
             CareGuideResponseAssembler careGuideResponseAssembler,
+            SkinReportWriter skinReportWriter,
             IdempotencyService idempotencyService,
             SensitiveDataConsentGuard consentGuard,
             Clock clock
     ) {
         this.skinReportRepository = skinReportRepository;
-        this.dailyCheckInRepository = dailyCheckInRepository;
         this.reportTextCipher = reportTextCipher;
         this.similarExperienceFinder = similarExperienceFinder;
         this.careResultGenerator = careResultGenerator;
         this.careGuideResponseAssembler = careGuideResponseAssembler;
+        this.skinReportWriter = skinReportWriter;
         this.idempotencyService = idempotencyService;
         this.consentGuard = consentGuard;
         this.clock = clock;
@@ -95,7 +96,6 @@ public class SkinReportSubmissionService {
      * 먼저 보는 이유는, 처음 요청이 성공한 뒤 응답을 못 받아 다시 보낸 경우에 409가 아니라 처음
      * 응답이 나가야 하기 때문이다.
      */
-    @Transactional
     public IdempotentResponse submit(
             AuthenticatedUser principal,
             UUID idempotencyKey,
@@ -111,14 +111,16 @@ public class SkinReportSubmissionService {
         Set<PreCareCheck> preCareChecks = request.preCareCheckSet();
         SkinReportPolicy.assertExclusiveSelections(appearances, sensations, situations, preCareChecks);
 
-        Object fingerprint = fingerprintOf(request, appearances, sensations, situations, preCareChecks);
+        LocalDate reportDate = SkinReportPolicy.today(clock);
+        Object fingerprint = fingerprintOf(
+                request, reportDate, appearances, sensations, situations, preCareChecks
+        );
         Optional<IdempotentResponse> replay = idempotencyService
                 .findReplay(userId, OPERATION_ID, idempotencyKey, fingerprint);
         if (replay.isPresent()) {
             return replay.get();
         }
 
-        LocalDate reportDate = SkinReportPolicy.today(clock);
         if (skinReportRepository.existsByUserIdAndReportDate(userId, reportDate)) {
             throw new BusinessException(ErrorCode.REPORT_ALREADY_EXISTS);
         }
@@ -131,7 +133,18 @@ public class SkinReportSubmissionService {
                 .map(FoundSimilarExperience::scored)
                 .orElse(null);
 
-        SkinReport report = skinReportRepository.saveAndFlush(SkinReport.create(
+        // 규칙 조회와 AI 호출은 여기서 끝낸다. 아래 저장 단계는 외부 응답을 기다리지 않는다.
+        CareResultPlan plan = careResultGenerator.plan(resultType, new RuleEvaluationFacts(
+                confirmed.primaryArea(),
+                appearances,
+                sensations,
+                situations,
+                confirmed.careAvailability(),
+                preCareChecks,
+                lookup.completedHistory()
+        ));
+
+        SkinReport report = SkinReport.create(
                 userId,
                 reportDate,
                 reportTextCipher.encrypt(request.rawText()),
@@ -145,47 +158,18 @@ public class SkinReportSubmissionService {
                 sensations,
                 situations,
                 preCareChecks
-        ));
+        );
 
-        GeneratedCareResult generated = careResultGenerator.generate(
-                report.getId(),
+        return skinReportWriter.write(
                 userId,
-                resultType,
-                new RuleEvaluationFacts(
-                        confirmed.primaryArea(),
-                        appearances,
-                        sensations,
-                        situations,
-                        confirmed.careAvailability(),
-                        preCareChecks,
-                        lookup.completedHistory()
-                ),
-                similarExperience
+                OPERATION_ID,
+                idempotencyKey,
+                fingerprint,
+                report,
+                plan,
+                similarExperience,
+                (savedReport, generated) -> toResponse(savedReport, request, generated, lookup)
         );
-        markDailyCheckIn(userId, reportDate, report.getId());
-
-        SkinReportCreatedResponse response = toResponse(report, request, generated, lookup);
-        IdempotentResponse created = IdempotentResponse.created(
-                idempotencyService.serialize(response), report.getId()
-        );
-        idempotencyService.store(userId, OPERATION_ID, idempotencyKey, fingerprint, created);
-        return created;
-    }
-
-    /**
-     * 그날의 피부 점호를 보고 상태로 바꾼다.
-     *
-     * <p>"오늘 불편 없음"을 먼저 저장했더라도 나중에 확정한 보고가 그날의 상태다. 홈 화면이 보고와
-     * 점호를 따로 보여 주면 사용자는 같은 날에 두 답을 한 것처럼 보게 된다.
-     */
-    private void markDailyCheckIn(UUID userId, LocalDate reportDate, UUID reportId) {
-        dailyCheckInRepository.findByUserIdAndCheckInDate(userId, reportDate)
-                .ifPresentOrElse(
-                        checkIn -> checkIn.replaceWithSkinReport(reportId),
-                        () -> dailyCheckInRepository.save(
-                                DailyCheckIn.skinReport(userId, reportDate, reportId)
-                        )
-                );
     }
 
     private SkinReportCreatedResponse toResponse(
@@ -229,9 +213,13 @@ public class SkinReportSubmissionService {
      *
      * <p>다중 선택은 정렬해서 담는다. 같은 값을 다른 순서로 보낸 요청은 뜻이 같으므로 같은 지문이
      * 나와야 한다. 순서까지 따지면 네트워크 재시도가 409로 막힌다.
+     *
+     * <p>보고 날짜도 함께 담는다. 기록은 24시간 보관하므로 자정을 넘겨 같은 키로 재시도하면 어제
+     * 응답이 그대로 나갈 수 있다. 날짜가 지문에 있으면 다른 요청으로 보아 409로 막힌다.
      */
     private Object fingerprintOf(
             CreateSkinReportRequest request,
+            LocalDate reportDate,
             Set<Appearance> appearances,
             Set<Sensation> sensations,
             Set<Situation> situations,
@@ -239,6 +227,7 @@ public class SkinReportSubmissionService {
     ) {
         ConfirmedSelectionsRequest confirmed = request.confirmed();
         return new SubmissionFingerprint(
+                reportDate.toString(),
                 request.rawText().trim(),
                 confirmed.primaryArea(),
                 trimToNull(confirmed.otherAreasNote()),
@@ -272,6 +261,7 @@ public class SkinReportSubmissionService {
 
     /** 해시 대상이 되는 정규화된 본문. 필드 순서가 곧 직렬화 순서라 값이 같으면 항상 같은 해시가 된다. */
     private record SubmissionFingerprint(
+            String reportDate,
             String rawText,
             Enum<?> primaryArea,
             String otherAreasNote,

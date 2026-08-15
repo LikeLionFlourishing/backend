@@ -19,7 +19,8 @@ public record OpenAiProperties(
         String model,
         Duration connectTimeout,
         Duration readTimeout,
-        int maxOutputTokens
+        int maxOutputTokens,
+        RateLimit rateLimit
 ) {
 
     private static final String DEFAULT_BASE_URL = "https://api.openai.com/v1";
@@ -30,6 +31,25 @@ public record OpenAiProperties(
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(3) : connectTimeout;
         readTimeout = readTimeout == null ? Duration.ofSeconds(8) : readTimeout;
         maxOutputTokens = maxOutputTokens <= 0 ? DEFAULT_MAX_OUTPUT_TOKENS : maxOutputTokens;
+        rateLimit = rateLimit == null ? RateLimit.defaults() : rateLimit;
+    }
+
+    /**
+     * 구조화 요청 제한.
+     *
+     * <p>구조화는 사용자가 한 화면에서 여러 번 부를 수 있고 호출마다 외부 비용이 든다. 보고 생성은
+     * 하루 한 건, 설명 재생성은 결과당 한 번으로 자연히 묶이는데 이 경로만 상한이 없다.
+     */
+    public record RateLimit(int limit, Duration window) {
+
+        public RateLimit {
+            limit = limit <= 0 ? 30 : limit;
+            window = window == null ? Duration.ofHours(1) : window;
+        }
+
+        private static RateLimit defaults() {
+            return new RateLimit(30, Duration.ofHours(1));
+        }
     }
 
     /** 키와 모델이 모두 있어야 호출을 시도한다. 없으면 곧바로 실패로 처리한다. */

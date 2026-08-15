@@ -31,6 +31,17 @@ public class OpenAiCareGuideNarration implements CareGuideNarrationPort {
     private static final String SCHEMA_NAME = "care_guide_narration";
     private static final int SUMMARY_MAX_LENGTH = 500;
 
+    /**
+     * 규칙 데이터와 무관하게 요약에서 항상 막는 표현.
+     *
+     * <p>항목 문구는 승인 목록에서만 나오지만 요약은 모델이 새로 쓰는 문장이다. 금지 표현을 규칙
+     * 데이터에만 맡기면 그 컬럼이 비어 있는 규칙이 걸릴 때 요약 검사가 사라진다. 진단·처방·단정으로
+     * 읽히는 말은 제외 범위에 명시된 것이라 기본값으로 둔다.
+     */
+    private static final List<String> BASELINE_FORBIDDEN_EXPRESSIONS = List.of(
+            "진단", "처방", "완치", "낫습니다", "낫는다", "치료제", "항생제", "스테로이드", "여드름약", "확실합니다"
+    );
+
     private static final String INSTRUCTIONS = """
             너는 검토를 마친 관리 규칙이 허용한 문구만 골라 오늘의 관리 안내를 정리하는 편집자다.
             아래 규칙을 지켜라.
@@ -81,7 +92,7 @@ public class OpenAiCareGuideNarration implements CareGuideNarrationPort {
         if (summary.isEmpty() || summary.length() > SUMMARY_MAX_LENGTH) {
             return violation("summary");
         }
-        if (containsForbiddenExpression(summary, command.forbiddenExpressions())) {
+        if (containsForbiddenExpression(summary, forbiddenExpressionsOf(command))) {
             return violation("forbiddenExpression");
         }
 
@@ -126,6 +137,13 @@ public class OpenAiCareGuideNarration implements CareGuideNarrationPort {
         return List.copyOf(selected);
     }
 
+    /** 규칙이 정한 금지 표현과 기본 금지 표현을 함께 본다. */
+    private List<String> forbiddenExpressionsOf(NarrationCommand command) {
+        List<String> expressions = new ArrayList<>(BASELINE_FORBIDDEN_EXPRESSIONS);
+        expressions.addAll(command.forbiddenExpressions());
+        return expressions;
+    }
+
     private boolean containsForbiddenExpression(String summary, List<String> forbiddenExpressions) {
         String normalized = summary.toLowerCase(Locale.ROOT);
         return forbiddenExpressions.stream()
@@ -157,10 +175,8 @@ public class OpenAiCareGuideNarration implements CareGuideNarrationPort {
         lines.add("항목별 최대 개수: " + command.maxItemsPerType());
         lines.add("적용 규칙 요약:");
         command.ruleSummaries().forEach(summary -> lines.add("- " + summary));
-        if (!command.forbiddenExpressions().isEmpty()) {
-            lines.add("금지 표현:");
-            command.forbiddenExpressions().forEach(expression -> lines.add("- " + expression));
-        }
+        lines.add("금지 표현:");
+        forbiddenExpressionsOf(command).forEach(expression -> lines.add("- " + expression));
         return String.join("\n", lines);
     }
 

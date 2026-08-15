@@ -13,7 +13,6 @@ import likelion.flourishing.domain.report.dto.response.CareGuideResponse;
 import likelion.flourishing.domain.report.dto.response.SimilarExperienceSummaryResponse;
 import likelion.flourishing.domain.report.entity.AiGenerationStatus;
 import likelion.flourishing.domain.report.entity.CareResult;
-import likelion.flourishing.domain.report.entity.CareResultItem;
 import likelion.flourishing.domain.report.entity.RuleActionType;
 import likelion.flourishing.domain.report.entity.SkinReport;
 import likelion.flourishing.domain.report.idempotency.IdempotencyService;
@@ -29,7 +28,6 @@ import likelion.flourishing.domain.report.similarity.SimilarExperienceFinder;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 대체 문구로 저장된 관리 설명을 한 번 더 만들어 본다.
@@ -40,6 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>재생성은 결과당 한 번이다. 성공했든 또 실패했든 시도하면 기회를 쓴 것으로 본다. 실패를 세지
  * 않으면 같은 요청을 계속 보내 AI를 무한히 호출할 수 있다. 실패해도 응답은 200이고, 대체 문구로
  * 남은 결과가 그대로 나간다.
+ *
+ * <p>기회를 가져가는 것은 {@link CareGuideRewriter}의 조건부 갱신이다. 여기서 미리 보는 확인은
+ * 불필요한 AI 호출을 줄이기 위한 것이고, 동시 요청에서 한 번만 통과시키는 판정은 DB가 한다.
  *
  * <p>의료진 확인 결과는 대상이 아니다. AI가 만든 설명이 아니라 승인된 문구를 그대로 전달한 결과라
  * 다시 만들 것이 없다.
@@ -57,6 +58,7 @@ public class CareGuideRegenerationService {
     private final CareRuleCatalogPort careRuleCatalogPort;
     private final CareGuideNarrationPort narrationPort;
     private final CareGuideItemPlanner itemPlanner;
+    private final CareGuideRewriter careGuideRewriter;
     private final CareGuideResponseAssembler careGuideResponseAssembler;
     private final SimilarExperienceFinder similarExperienceFinder;
     private final IdempotencyService idempotencyService;
@@ -71,6 +73,7 @@ public class CareGuideRegenerationService {
             CareRuleCatalogPort careRuleCatalogPort,
             CareGuideNarrationPort narrationPort,
             CareGuideItemPlanner itemPlanner,
+            CareGuideRewriter careGuideRewriter,
             CareGuideResponseAssembler careGuideResponseAssembler,
             SimilarExperienceFinder similarExperienceFinder,
             IdempotencyService idempotencyService,
@@ -84,6 +87,7 @@ public class CareGuideRegenerationService {
         this.careRuleCatalogPort = careRuleCatalogPort;
         this.narrationPort = narrationPort;
         this.itemPlanner = itemPlanner;
+        this.careGuideRewriter = careGuideRewriter;
         this.careGuideResponseAssembler = careGuideResponseAssembler;
         this.similarExperienceFinder = similarExperienceFinder;
         this.idempotencyService = idempotencyService;
@@ -94,17 +98,19 @@ public class CareGuideRegenerationService {
     /**
      * 관리 설명을 다시 만든다.
      *
-     * <p>확인 순서는 동의 → 소유권 → 재생성 가능 여부 → 사용 여부다. 소유권을 먼저 걸러야 남의
+     * <p>확인 순서는 동의 → 소유권 → 사용 여부 → 재생성 가능 여부다. 소유권을 먼저 걸러야 남의
      * 보고 상태가 오류 메시지로 새어 나가지 않는다.
+     *
+     * <p>트랜잭션을 걸지 않는다. AI 호출까지 끝낸 다음 저장만 {@link CareGuideRewriter}에 맡긴다.
      *
      * @param idempotencyKey 없으면 null. 있으면 같은 키의 재전송에 저장된 응답을 그대로 돌려준다.
      */
-    @Transactional
     public IdempotentResponse regenerate(AuthenticatedUser principal, UUID reportId, UUID idempotencyKey) {
         UUID userId = principal.userId();
         consentGuard.assertConsented(userId);
 
-        SkinReport report = skinReportRepository.findByIdAndUserId(reportId, userId)
+        // 선택값까지 함께 읽는다. 아래 AI 호출이 트랜잭션 밖이라 그 뒤에는 지연 로딩이 되지 않는다.
+        SkinReport report = skinReportRepository.findWithSelectionsByIdAndUserId(reportId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         CareResult careResult = careResultRepository.findByReportIdAndUserId(reportId, userId)
                 .orElseThrow(() -> new IllegalStateException("피부 보고에 관리 결과가 없습니다."));
@@ -135,14 +141,20 @@ public class CareGuideRegenerationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RULE_ENGINE_UNAVAILABLE));
 
         CareActionAllowList allowList = CareActionAllowList.from(appliedRuleSet.rules());
-        List<PlannedCareItem> items = applyNarration(report, careResult, allowList);
+        NarrationOutcome narration = narrate(report, allowList);
+        List<PlannedCareItem> planned = narration.isSucceeded()
+                ? itemPlanner.planFromNarration(allowList, narration)
+                : List.of();
+
+        CareResult updated = applyOutcome(careResult, narration, planned);
+        List<PlannedCareItem> items = planned.isEmpty() ? storedItems(careResult.getId()) : planned;
 
         CareGuideResponse response = careGuideResponseAssembler.assemble(
-                careResult,
+                updated,
                 appliedRuleSet.versionCode(),
                 appliedRuleSet.rules(),
                 items,
-                describeSimilarExperience(userId, careResult)
+                describeSimilarExperience(userId, updated)
         );
         IdempotentResponse regenerated = IdempotentResponse.ok(
                 idempotencyService.serialize(response), report.getId()
@@ -154,21 +166,13 @@ public class CareGuideRegenerationService {
     }
 
     /**
-     * 설명을 다시 만들고 결과에 반영한다.
+     * 설명 생성을 시도한다.
      *
-     * <p>성공하면 항목을 지우고 새로 넣는다. (결과, 유형, 순서) 유니크 제약이 있어 덮어쓸 수 없고,
-     * 지우고 넣는 두 단계가 같은 트랜잭션에서 끝나야 한다.
-     *
-     * <p>실패하면 저장된 항목과 요약을 그대로 둔다. 이미 승인된 대체 문구가 들어 있어 사용자에게
-     * 보여 줄 것이 없어지지 않는다.
+     * <p>고를 문구가 하나도 없으면 부르지 않고 503으로 돌린다. 다시 만들 재료가 없는 상황이라
+     * 실패로 처리해 단 한 번의 기회를 쓰게 하면 사용자가 손해를 본다.
      */
-    private List<PlannedCareItem> applyNarration(
-            SkinReport report,
-            CareResult careResult,
-            CareActionAllowList allowList
-    ) {
-        LocalDateTime now = LocalDateTime.now(clock);
-        NarrationOutcome narration = narrationPort.narrate(new NarrationCommand(
+    private NarrationOutcome narrate(SkinReport report, CareActionAllowList allowList) {
+        NarrationCommand command = new NarrationCommand(
                 report.getPrimaryArea(),
                 report.getAppearances(),
                 report.getSensations(),
@@ -180,29 +184,32 @@ public class CareGuideRegenerationService {
                 allowList.contentsOf(RuleActionType.CHECK_NEXT),
                 allowList.forbiddenExpressions(),
                 CareGuideItemPlanner.MAX_ITEMS_PER_TYPE
-        ));
-
-        if (narration.isSucceeded()) {
-            List<PlannedCareItem> planned = itemPlanner.planFromNarration(allowList, narration);
-            if (!planned.isEmpty()) {
-                careResultItemRepository.deleteAllByCareResultId(careResult.getId());
-                careResultItemRepository.flush();
-                careResultItemRepository.saveAll(planned.stream()
-                        .map(item -> CareResultItem.snapshot(
-                                careResult.getId(),
-                                item.sourceRuleActionId(),
-                                item.itemType(),
-                                item.content(),
-                                item.displayOrder()
-                        ))
-                        .toList());
-                careResult.applyRegeneratedGuide(AiGenerationStatus.GENERATED, narration.summary(), now);
-                return planned;
-            }
+        );
+        if (!command.hasAllowedActions()) {
+            throw new BusinessException(ErrorCode.RULE_ENGINE_UNAVAILABLE);
         }
+        return narrationPort.narrate(command);
+    }
 
-        careResult.applyRegeneratedGuide(AiGenerationStatus.FALLBACK, careResult.getSummary(), now);
-        return storedItems(careResult.getId());
+    /**
+     * 결과를 갱신한다.
+     *
+     * <p>성공하면 새 요약과 항목으로 바꾼다. 실패하면 저장된 요약과 항목을 그대로 두고 상태만
+     * FALLBACK으로 유지한다. 어느 쪽이든 기회를 쓴 것으로 표시한다.
+     */
+    private CareResult applyOutcome(
+            CareResult careResult,
+            NarrationOutcome narration,
+            List<PlannedCareItem> planned
+    ) {
+        boolean succeeded = narration.isSucceeded() && !planned.isEmpty();
+        return careGuideRewriter.rewrite(
+                careResult.getId(),
+                succeeded ? AiGenerationStatus.GENERATED : AiGenerationStatus.FALLBACK,
+                succeeded ? narration.summary() : careResult.getSummary(),
+                LocalDateTime.now(clock),
+                planned
+        ).orElseThrow(() -> new BusinessException(ErrorCode.AI_RETRY_ALREADY_USED));
     }
 
     private List<PlannedCareItem> storedItems(UUID careResultId) {

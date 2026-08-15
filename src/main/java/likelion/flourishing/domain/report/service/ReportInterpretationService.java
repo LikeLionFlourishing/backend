@@ -9,8 +9,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.ai.ExtractedSelections;
+import likelion.flourishing.domain.report.ai.OpenAiProperties;
 import likelion.flourishing.domain.report.ai.SkinReportStructuringPort;
 import likelion.flourishing.domain.report.ai.StructuringOutcome;
 import likelion.flourishing.domain.report.dto.request.ManualSelectionsRequest;
@@ -23,6 +25,9 @@ import likelion.flourishing.domain.report.entity.BodyArea;
 import likelion.flourishing.domain.report.entity.CareAvailability;
 import likelion.flourishing.domain.report.entity.Sensation;
 import likelion.flourishing.domain.report.entity.Situation;
+import likelion.flourishing.global.exception.TooManyRequestsException;
+import likelion.flourishing.support.RateLimitResult;
+import likelion.flourishing.support.RateLimiter;
 import org.springframework.stereotype.Service;
 
 /**
@@ -44,25 +49,34 @@ public class ReportInterpretationService {
     private static final String FIELD_SITUATIONS = "situations";
     private static final String FIELD_CARE_AVAILABILITY = "careAvailability";
 
+    private static final String RATE_LIMIT_SCOPE = "report-interpretation";
+
     private final SkinReportStructuringPort structuringPort;
     private final SensitiveDataConsentGuard consentGuard;
+    private final RateLimiter rateLimiter;
+    private final OpenAiProperties openAiProperties;
     private final Clock clock;
 
     public ReportInterpretationService(
             SkinReportStructuringPort structuringPort,
             SensitiveDataConsentGuard consentGuard,
+            RateLimiter rateLimiter,
+            OpenAiProperties openAiProperties,
             Clock clock
     ) {
         this.structuringPort = structuringPort;
         this.consentGuard = consentGuard;
+        this.rateLimiter = rateLimiter;
+        this.openAiProperties = openAiProperties;
         this.clock = clock;
     }
 
     /**
      * 원문을 구조화한다.
      *
-     * <p>확인 순서는 동의 → 조합 검증 → AI 호출이다. 동의가 없으면 원문을 외부 모델에 보내면 안
-     * 되고, 사용자가 고른 값이 이미 잘못된 조합이면 AI를 부를 필요가 없다.
+     * <p>확인 순서는 동의 → 조합 검증 → 요청 제한 → AI 호출이다. 동의가 없으면 원문을 외부 모델에
+     * 보내면 안 되고, 사용자가 고른 값이 이미 잘못된 조합이면 AI를 부를 필요가 없다. 제한 확인은
+     * 실제로 호출을 하기 직전에 한다. 형식이 틀린 요청까지 사용자 몫으로 세지 않기 위해서다.
      */
     public ReportInterpretationResponse interpret(
             AuthenticatedUser principal,
@@ -77,6 +91,7 @@ public class ReportInterpretationService {
                 manual.situationSet(),
                 Set.of()
         );
+        assertWithinRateLimit(principal.userId());
 
         StructuringOutcome outcome = structuringPort.structure(request.rawText());
         ExtractedSelections extracted = outcome.extracted();
@@ -116,6 +131,22 @@ public class ReportInterpretationService {
         return ReportInterpretationResponse.failed(
                 outcome.failureCode(), structured, fieldSources, interpretedAt
         );
+    }
+
+    /**
+     * 사용자당 호출 상한을 확인한다.
+     *
+     * <p>호출마다 원문 한 건이 외부로 나가고 응답까지 스레드를 붙잡는다. 인증만으로 열어 두면 비용과
+     * 외부 전송량이 클라이언트 재량이 된다.
+     */
+    private void assertWithinRateLimit(UUID userId) {
+        OpenAiProperties.RateLimit rule = openAiProperties.rateLimit();
+        RateLimitResult result = rateLimiter.consume(
+                RATE_LIMIT_SCOPE, userId.toString(), rule.limit(), rule.window()
+        );
+        if (!result.allowed()) {
+            throw new TooManyRequestsException(result);
+        }
     }
 
     /** 사용자가 고른 값이 있으면 그것을 쓴다. 없을 때에만 AI 값을 쓴다. */

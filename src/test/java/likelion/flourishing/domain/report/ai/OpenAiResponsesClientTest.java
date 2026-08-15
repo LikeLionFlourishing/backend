@@ -150,7 +150,7 @@ class OpenAiResponsesClientTest {
     @Test
     void missingApiKeySkipsTheCall() {
         OpenAiProperties notConfigured = new OpenAiProperties(
-                baseUrl, "", "test-model", Duration.ofSeconds(1), Duration.ofSeconds(1), 100
+                baseUrl, "", "test-model", Duration.ofSeconds(1), Duration.ofSeconds(1), 100, null
         );
 
         OpenAiJsonOutcome outcome = new OpenAiResponsesClient(objectMapper, notConfigured)
@@ -162,7 +162,7 @@ class OpenAiResponsesClientTest {
 
     private OpenAiResponsesClient client(Duration readTimeout) {
         return new OpenAiResponsesClient(objectMapper, new OpenAiProperties(
-                baseUrl, "test-key", "test-model", Duration.ofSeconds(2), readTimeout, 200
+                baseUrl, "test-key", "test-model", Duration.ofSeconds(2), readTimeout, 200, null
         ));
     }
 

@@ -98,6 +98,22 @@ public final class CareRuleFixtures {
         );
     }
 
+    /** 허용 문구가 하나도 없는 규칙. 문구를 모두 끈 뒤의 상태를 재현한다. */
+    public static CareRuleSnapshot ruleWithoutActions() {
+        return new CareRuleSnapshot(
+                UUID.fromString("0198a31f-f33f-7000-8000-0000000000d1"),
+                UUID.fromString("0198a31f-f33f-7000-8000-0000000000d0"),
+                "STA-001",
+                RuleCategory.CURRENT_STATE,
+                200,
+                "붉음이 있을 때의 관리",
+                "붉은 자리를 건드리지 않고 진정에 집중해 주세요.",
+                List.of(),
+                List.of(),
+                List.of()
+        );
+    }
+
     public static ActiveRuleCatalog activeCatalog(CareRuleSnapshot... rules) {
         return new ActiveRuleCatalog(
                 UUID.fromString("0198a31f-f33f-7000-8000-000000000901"),

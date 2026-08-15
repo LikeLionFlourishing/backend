@@ -9,9 +9,16 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.ai.AiFailureCode;
 import likelion.flourishing.domain.report.ai.CareGuideNarrationPort;
@@ -375,6 +382,62 @@ class ReportSubmissionMySqlIntegrationTest {
                 .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
     }
 
+    /** 하루 한 건 검사와 저장 사이에 다른 요청이 끼어도 보고는 하나만 남아야 한다. */
+    @Test
+    void concurrentSubmissionsStoreOnlyOneReport() throws Exception {
+        stubFallbackNarration();
+
+        List<Outcome> outcomes = runConcurrently(
+                () -> submissionService.submit(principal(), UUID.randomUUID(), selfCareRequest()),
+                () -> submissionService.submit(principal(), UUID.randomUUID(), selfCareRequest())
+        );
+
+        assertThat(outcomes).filteredOn(Outcome::succeeded).hasSize(1);
+        assertThat(outcomes).filteredOn(outcome -> !outcome.succeeded())
+                .allSatisfy(outcome -> assertThat(outcome.errorCode())
+                        .isEqualTo(ErrorCode.REPORT_ALREADY_EXISTS));
+        assertThat(countOf("skin_reports")).isEqualTo(1);
+        assertThat(countOf("care_results")).isEqualTo(1);
+        assertThat(countOf("daily_check_ins")).isEqualTo(1);
+    }
+
+    /** 재생성 기회는 결과당 하나다. 동시 호출이 둘 다 통과하면 항목 삽입이 서로 엉킨다. */
+    @Test
+    void concurrentRegenerationsConsumeTheRetryOnce() throws Exception {
+        stubFallbackNarration();
+        UUID reportId = submissionService
+                .submit(principal(), UUID.randomUUID(), selfCareRequest())
+                .resourceId();
+        when(narrationPort.narrate(any())).thenReturn(NarrationOutcome.succeeded(
+                "찬 물수건으로 진정하고 오늘은 만지지 마세요.",
+                List.of("찬 물수건으로 진정하기"),
+                List.of("손으로 만지지 않기"),
+                List.of()
+        ));
+
+        List<Outcome> outcomes = runConcurrently(
+                () -> regenerationService.regenerate(principal(), reportId, null),
+                () -> regenerationService.regenerate(principal(), reportId, null)
+        );
+
+        assertThat(outcomes).filteredOn(Outcome::succeeded).hasSize(1);
+        assertThat(outcomes).filteredOn(outcome -> !outcome.succeeded())
+                .allSatisfy(outcome -> assertThat(outcome.errorCode())
+                        .isEqualTo(ErrorCode.AI_RETRY_ALREADY_USED));
+
+        Map<String, Object> careResult = queryOne("""
+                SELECT BIN_TO_UUID(id) AS id, retry_used, ai_generation_status FROM care_results
+                WHERE report_id = UUID_TO_BIN(?)
+                """, reportId.toString());
+        assertThat(careResult.get("retry_used")).isEqualTo(true);
+        assertThat(careResult.get("ai_generation_status")).isEqualTo("GENERATED");
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT content_snapshot FROM care_result_items WHERE care_result_id = UUID_TO_BIN(?)
+                """, careResult.get("id").toString()))
+                .extracting(row -> row.get("content_snapshot"))
+                .containsExactlyInAnyOrder("찬 물수건으로 진정하기", "손으로 만지지 않기");
+    }
+
     @Test
     void submissionWithoutConsentIsRefused() {
         jdbcTemplate.update("DELETE FROM user_consents WHERE user_id = UUID_TO_BIN(?)", USER_ID.toString());
@@ -390,6 +453,49 @@ class ReportSubmissionMySqlIntegrationTest {
 
     private void stubFallbackNarration() {
         when(narrationPort.narrate(any())).thenReturn(NarrationOutcome.failed(AiFailureCode.AI_TIMEOUT));
+    }
+
+    /**
+     * 두 요청을 최대한 같은 순간에 보낸다.
+     *
+     * <p>래치로 출발을 맞춰 검사와 저장 사이에 상대가 끼어들 창을 만든다. 완전히 동시임을 보장할 수는
+     * 없지만, 순차 실행에서는 절대 나오지 않는 경합을 반복 실행에서 잡아낸다.
+     */
+    private List<Outcome> runConcurrently(Callable<IdempotentResponse> first, Callable<IdempotentResponse> second)
+            throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<Outcome>> futures = List.of(
+                    executor.submit(() -> attempt(start, first)),
+                    executor.submit(() -> attempt(start, second))
+            );
+            start.countDown();
+            List<Outcome> outcomes = new ArrayList<>();
+            for (Future<Outcome> future : futures) {
+                outcomes.add(future.get(30, TimeUnit.SECONDS));
+            }
+            return outcomes;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private Outcome attempt(CountDownLatch start, Callable<IdempotentResponse> call) throws Exception {
+        start.await();
+        try {
+            return new Outcome(call.call(), null);
+        } catch (BusinessException exception) {
+            return new Outcome(null, exception.getErrorCode());
+        }
+    }
+
+    /** 동시 실행 결과. 성공하면 응답이, 업무 규칙에 막히면 오류 코드가 담긴다. */
+    private record Outcome(IdempotentResponse response, ErrorCode errorCode) {
+
+        private boolean succeeded() {
+            return response != null;
+        }
     }
 
     private CreateSkinReportRequest selfCareRequest() {

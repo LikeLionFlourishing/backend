@@ -78,6 +78,11 @@ app:
       connect-timeout: 3s
       read-timeout: 8s
       max-output-tokens: 800
+      # 구조화는 사용자가 한 화면에서 여러 번 부를 수 있고 호출마다 외부 비용이 든다.
+      # 보고 생성과 설명 재생성은 하루 한 건·결과당 한 번으로 자연히 묶이므로 이 경로만 제한한다.
+      rate-limit:
+        limit: 30
+        window: 1h
 
   notifications:
     crypto:

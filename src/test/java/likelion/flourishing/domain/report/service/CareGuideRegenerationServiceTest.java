@@ -3,6 +3,8 @@ package likelion.flourishing.domain.report.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,7 +63,8 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
  *
  * <p>확인하는 것: 남의 보고를 404로 막는지, 대체 문구가 아닌 결과를 422로 막는지, 이미 쓴 재생성을
  * 409로 막는지, 성공하면 항목을 갈아 끼우고 실패하면 그대로 두는지, 어느 쪽이든 기회를 쓴 것으로
- * 표시하는지, 규칙을 다시 판단하지 않고 당시 적용 규칙을 쓰는지.
+ * 표시하는지, 규칙을 다시 판단하지 않고 당시 적용 규칙을 쓰는지, 조건부 갱신에서 밀린 요청이
+ * 409가 되는지.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -72,6 +75,7 @@ class CareGuideRegenerationServiceTest {
     private static final UUID REPORT_ID = UUID.fromString("0198a31f-f33f-7000-8000-000000000011");
     private static final UUID RULE_SET_ID = UUID.fromString("0198a31f-f33f-7000-8000-000000000901");
     private static final Instant NOW = Instant.parse("2026-08-15T06:00:00Z");
+    private static final String FALLBACK_SUMMARY = "오늘은 자극을 줄이고 상태를 지켜봐 주세요.";
 
     @Mock
     private SkinReportRepository skinReportRepository;
@@ -90,6 +94,9 @@ class CareGuideRegenerationServiceTest {
 
     @Mock
     private CareGuideNarrationPort narrationPort;
+
+    @Mock
+    private CareGuideRewriter careGuideRewriter;
 
     @Mock
     private IdempotencyService idempotencyService;
@@ -112,6 +119,7 @@ class CareGuideRegenerationServiceTest {
                 careRuleCatalogPort,
                 narrationPort,
                 new CareGuideItemPlanner(),
+                careGuideRewriter,
                 new CareGuideResponseAssembler(),
                 similarExperienceFinder,
                 idempotencyService,
@@ -119,7 +127,8 @@ class CareGuideRegenerationServiceTest {
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );
 
-        when(skinReportRepository.findByIdAndUserId(REPORT_ID, USER_ID)).thenReturn(Optional.of(report()));
+        when(skinReportRepository.findWithSelectionsByIdAndUserId(REPORT_ID, USER_ID)).thenReturn(Optional.of(report()));
+        stubCareResult(selfCareResult(AiGenerationStatus.FALLBACK));
         when(careResultRuleRepository.findAllByIdCareResultIdOrderByApplicationOrder(any()))
                 .thenReturn(List.of(CareResultRule.of(
                         UUID.randomUUID(),
@@ -140,11 +149,13 @@ class CareGuideRegenerationServiceTest {
                 )));
         when(idempotencyService.serialize(any())).thenAnswer(call -> serialize(call.getArgument(0)));
         when(idempotencyService.findReplay(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(careGuideRewriter.rewrite(any(), any(), any(), any(), anyList()))
+                .thenAnswer(call -> Optional.of(rewritten(call.getArgument(1), call.getArgument(2))));
     }
 
     @Test
     void otherUsersReportIsNotFound() {
-        when(skinReportRepository.findByIdAndUserId(REPORT_ID, USER_ID)).thenReturn(Optional.empty());
+        when(skinReportRepository.findWithSelectionsByIdAndUserId(REPORT_ID, USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.regenerate(principal(), REPORT_ID, null))
                 .isInstanceOf(BusinessException.class)
@@ -186,7 +197,7 @@ class CareGuideRegenerationServiceTest {
     void alreadyUsedRetryIsRejected() {
         CareResult careResult = selfCareResult(AiGenerationStatus.FALLBACK);
         careResult.applyRegeneratedGuide(
-                AiGenerationStatus.FALLBACK, "대체 문구", LocalDateTime.ofInstant(NOW, ZoneOffset.UTC)
+                AiGenerationStatus.FALLBACK, FALLBACK_SUMMARY, LocalDateTime.ofInstant(NOW, ZoneOffset.UTC)
         );
         stubCareResult(careResult);
 
@@ -212,62 +223,66 @@ class CareGuideRegenerationServiceTest {
                 .isEqualTo(ErrorCode.AI_RETRY_ALREADY_USED);
     }
 
+    /** 조건부 갱신에서 밀린 요청은 다른 요청이 기회를 가져간 것이다. */
+    @Test
+    void losingTheConditionalUpdateIsReportedAsAlreadyUsed() {
+        stubSuccessfulNarration();
+        when(careGuideRewriter.rewrite(any(), any(), any(), any(), anyList())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.regenerate(principal(), REPORT_ID, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.AI_RETRY_ALREADY_USED);
+    }
+
     @Test
     void successfulRegenerationReplacesItemsAndMarksRetryUsed() {
-        CareResult careResult = selfCareResult(AiGenerationStatus.FALLBACK);
-        stubCareResult(careResult);
-        when(narrationPort.narrate(any())).thenReturn(NarrationOutcome.succeeded(
-                "붉은 자리를 건드리지 않고 진정에 집중해 주세요.",
-                List.of("찬 물수건으로 진정하기"),
-                List.of("각질 제거하지 않기"),
-                List.of()
-        ));
+        stubSuccessfulNarration();
 
         IdempotentResponse response = service.regenerate(principal(), REPORT_ID, null);
 
         assertThat(response.status()).isEqualTo(200);
-        assertThat(careResult.getAiGenerationStatus()).isEqualTo(AiGenerationStatus.GENERATED);
-        assertThat(careResult.getSummary()).isEqualTo("붉은 자리를 건드리지 않고 진정에 집중해 주세요.");
-        assertThat(careResult.isRetryUsed()).isTrue();
         assertThat(response.jsonBody()).contains("\"retryUsed\":true");
         assertThat(response.jsonBody()).contains("찬 물수건으로 진정하기");
-        verify(careResultItemRepository).deleteAllByCareResultId(careResult.getId());
-        verify(careResultItemRepository).saveAll(any());
+        assertThat(response.jsonBody()).contains("\"aiGenerationStatus\":\"GENERATED\"");
+        verify(careGuideRewriter).rewrite(
+                any(),
+                eq(AiGenerationStatus.GENERATED),
+                eq("붉은 자리를 건드리지 않고 진정에 집중해 주세요."),
+                any(),
+                anyList()
+        );
     }
 
     @Test
     void failedRegenerationKeepsFallbackAndStillConsumesTheRetry() {
-        CareResult careResult = selfCareResult(AiGenerationStatus.FALLBACK);
-        stubCareResult(careResult);
         when(narrationPort.narrate(any())).thenReturn(NarrationOutcome.failed(AiFailureCode.AI_TIMEOUT));
 
         IdempotentResponse response = service.regenerate(principal(), REPORT_ID, null);
 
         assertThat(response.status()).isEqualTo(200);
-        assertThat(careResult.getAiGenerationStatus()).isEqualTo(AiGenerationStatus.FALLBACK);
-        assertThat(careResult.getSummary()).isEqualTo("오늘은 자극을 줄이고 상태를 지켜봐 주세요.");
-        assertThat(careResult.isRetryUsed()).isTrue();
-        verify(careResultItemRepository, never()).deleteAllByCareResultId(any());
+        assertThat(response.jsonBody()).contains("\"aiGenerationStatus\":\"FALLBACK\"");
         assertThat(response.jsonBody()).contains("미지근한 물로 씻기");
+        verify(careGuideRewriter).rewrite(
+                any(), eq(AiGenerationStatus.FALLBACK), eq(FALLBACK_SUMMARY), any(), eq(List.of())
+        );
     }
 
     @Test
     void contentOutsideTheOriginalAllowListIsNotStored() {
-        CareResult careResult = selfCareResult(AiGenerationStatus.FALLBACK);
-        stubCareResult(careResult);
         when(narrationPort.narrate(any())).thenReturn(NarrationOutcome.succeeded(
                 "연고를 바르세요.", List.of("스테로이드 연고 바르기"), List.of(), List.of()
         ));
 
         service.regenerate(principal(), REPORT_ID, null);
 
-        assertThat(careResult.getAiGenerationStatus()).isEqualTo(AiGenerationStatus.FALLBACK);
-        verify(careResultItemRepository, never()).saveAll(any());
+        verify(careGuideRewriter).rewrite(
+                any(), eq(AiGenerationStatus.FALLBACK), eq(FALLBACK_SUMMARY), any(), eq(List.of())
+        );
     }
 
     @Test
     void brokenAppliedRuleSnapshotStopsRegeneration() {
-        stubCareResult(selfCareResult(AiGenerationStatus.FALLBACK));
         when(careRuleCatalogPort.loadAppliedRules(any(), any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.regenerate(principal(), REPORT_ID, null))
@@ -276,9 +291,23 @@ class CareGuideRegenerationServiceTest {
                 .isEqualTo(ErrorCode.RULE_ENGINE_UNAVAILABLE);
     }
 
+    /** 고를 문구가 없으면 실패로 처리해 단 한 번의 기회를 쓰게 하지 않는다. */
+    @Test
+    void noAllowedActionStopsRegenerationWithoutConsumingTheRetry() {
+        when(careRuleCatalogPort.loadAppliedRules(any(), any())).thenReturn(Optional.of(new AppliedRuleSet(
+                "2026-08-15-v1", List.of(CareRuleFixtures.ruleWithoutActions())
+        )));
+
+        assertThatThrownBy(() -> service.regenerate(principal(), REPORT_ID, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.RULE_ENGINE_UNAVAILABLE);
+        verify(narrationPort, never()).narrate(any());
+        verify(careGuideRewriter, never()).rewrite(any(), any(), any(), any(), anyList());
+    }
+
     @Test
     void activeCatalogIsNotConsultedForRegeneration() {
-        stubCareResult(selfCareResult(AiGenerationStatus.FALLBACK));
         when(narrationPort.narrate(any())).thenReturn(NarrationOutcome.failed(AiFailureCode.AI_HTTP_ERROR));
 
         service.regenerate(principal(), REPORT_ID, null);
@@ -291,7 +320,6 @@ class CareGuideRegenerationServiceTest {
 
     @Test
     void idempotencyKeyReplaysStoredResponse() {
-        stubCareResult(selfCareResult(AiGenerationStatus.FALLBACK));
         UUID key = UUID.fromString("11111111-2222-4333-8444-555555555555");
         IdempotentResponse stored = IdempotentResponse.replay(200, "{\"summary\":\"stored\"}", REPORT_ID);
         when(idempotencyService.findReplay(any(), any(), any(), any())).thenReturn(Optional.of(stored));
@@ -300,9 +328,27 @@ class CareGuideRegenerationServiceTest {
         verify(narrationPort, never()).narrate(any());
     }
 
+    private void stubSuccessfulNarration() {
+        when(narrationPort.narrate(any())).thenReturn(NarrationOutcome.succeeded(
+                "붉은 자리를 건드리지 않고 진정에 집중해 주세요.",
+                List.of("찬 물수건으로 진정하기"),
+                List.of("각질 제거하지 않기"),
+                List.of()
+        ));
+    }
+
     private void stubCareResult(CareResult careResult) {
         when(careResultRepository.findByReportIdAndUserId(REPORT_ID, USER_ID))
                 .thenReturn(Optional.of(careResult));
+    }
+
+    /** 조건부 갱신을 통과한 뒤 다시 읽은 결과. */
+    private CareResult rewritten(AiGenerationStatus aiGenerationStatus, String summary) {
+        CareResult careResult = selfCareResult(AiGenerationStatus.FALLBACK);
+        careResult.applyRegeneratedGuide(
+                aiGenerationStatus, summary, LocalDateTime.ofInstant(NOW, ZoneOffset.UTC)
+        );
+        return careResult;
     }
 
     private CareResult selfCareResult(AiGenerationStatus aiGenerationStatus) {
@@ -313,7 +359,7 @@ class CareGuideRegenerationServiceTest {
                 null,
                 null,
                 aiGenerationStatus,
-                "오늘은 자극을 줄이고 상태를 지켜봐 주세요.",
+                FALLBACK_SUMMARY,
                 LocalDateTime.ofInstant(NOW, ZoneOffset.UTC)
         );
     }

@@ -109,7 +109,7 @@ public class CareRuleCatalogAdapter implements CareRuleCatalogPort {
                 .stream()
                 .collect(Collectors.toMap(CareRule::getId, Function.identity()));
         Map<UUID, List<RuleAction>> actions = ruleActionRepository
-                .findAllByRuleVersionIdInAndActiveTrue(ruleVersionIds).stream()
+                .findAllByRuleVersionIdIn(ruleVersionIds).stream()
                 .collect(Collectors.groupingBy(RuleAction::getRuleVersionId));
 
         // 넘어온 순서가 곧 적용 순서다. 조회 결과 순서에 기대지 않고 인자 순서대로 다시 세운다.

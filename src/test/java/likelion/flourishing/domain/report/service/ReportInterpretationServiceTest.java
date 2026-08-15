@@ -2,6 +2,8 @@ package likelion.flourishing.domain.report.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -18,6 +20,7 @@ import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.ai.AiFailureCode;
 import likelion.flourishing.domain.report.ai.ExtractedSelections;
+import likelion.flourishing.domain.report.ai.OpenAiProperties;
 import likelion.flourishing.domain.report.ai.SkinReportStructuringPort;
 import likelion.flourishing.domain.report.ai.StructuringOutcome;
 import likelion.flourishing.domain.report.dto.request.ManualSelectionsRequest;
@@ -32,6 +35,9 @@ import likelion.flourishing.domain.report.entity.Sensation;
 import likelion.flourishing.domain.report.entity.Situation;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
+import likelion.flourishing.global.exception.TooManyRequestsException;
+import likelion.flourishing.support.RateLimitResult;
+import likelion.flourishing.support.RateLimiter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,13 +66,34 @@ class ReportInterpretationServiceTest {
     @Mock
     private SensitiveDataConsentGuard consentGuard;
 
+    @Mock
+    private RateLimiter rateLimiter;
+
     private ReportInterpretationService service;
 
     @BeforeEach
     void setUp() {
         service = new ReportInterpretationService(
-                structuringPort, consentGuard, Clock.fixed(NOW, ZoneOffset.UTC)
+                structuringPort,
+                consentGuard,
+                rateLimiter,
+                new OpenAiProperties(null, null, null, null, null, 0, null),
+                Clock.fixed(NOW, ZoneOffset.UTC)
         );
+        when(rateLimiter.consume(any(), any(), anyInt(), any()))
+                .thenReturn(new RateLimitResult(true, 30, 29, 3600, 0L));
+    }
+
+    @Test
+    void exceedingTheHourlyLimitStopsTheModelCall() {
+        when(rateLimiter.consume(any(), any(), anyInt(), any()))
+                .thenReturn(new RateLimitResult(false, 30, 0, 600, 0L));
+
+        assertThatThrownBy(() -> service.interpret(
+                principal(), new ReportInterpretationRequest("턱이 빨개요.", null)
+        ))
+                .isInstanceOf(TooManyRequestsException.class);
+        verify(structuringPort, never()).structure(anyString());
     }
 
     @Test
