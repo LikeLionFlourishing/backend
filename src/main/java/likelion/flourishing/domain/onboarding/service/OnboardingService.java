@@ -1,81 +1,48 @@
 package likelion.flourishing.domain.onboarding.service;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
-import likelion.flourishing.domain.auth.service.AuthService;
 import likelion.flourishing.domain.onboarding.dto.request.OnboardingRequest;
 import likelion.flourishing.domain.onboarding.dto.response.OnboardingResponse;
-import likelion.flourishing.domain.onboarding.entity.ConsentType;
-import likelion.flourishing.domain.onboarding.entity.NotificationSetting;
-import likelion.flourishing.domain.onboarding.entity.UserConsent;
-import likelion.flourishing.domain.onboarding.repository.NotificationSettingRepository;
-import likelion.flourishing.domain.onboarding.repository.UserConsentRepository;
+import likelion.flourishing.global.config.OnboardingProperties;
+import likelion.flourishing.global.exception.BusinessException;
+import likelion.flourishing.global.exception.ErrorCode;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /** 최신 필수 동의와 알림 선택을 저장하고 가입을 완료 처리한다. */
 @Service
 public class OnboardingService {
 
-    private final AuthService authService;
-    private final UserConsentRepository userConsentRepository;
-    private final NotificationSettingRepository notificationSettingRepository;
-    private final Clock clock;
+    private final OnboardingProperties onboardingProperties;
+    private final OnboardingWriter onboardingWriter;
 
-    public OnboardingService(
-            AuthService authService,
-            UserConsentRepository userConsentRepository,
-            NotificationSettingRepository notificationSettingRepository,
-            Clock clock
-    ) {
-        this.authService = authService;
-        this.userConsentRepository = userConsentRepository;
-        this.notificationSettingRepository = notificationSettingRepository;
-        this.clock = clock;
+    public OnboardingService(OnboardingProperties onboardingProperties, OnboardingWriter onboardingWriter) {
+        this.onboardingProperties = onboardingProperties;
+        this.onboardingWriter = onboardingWriter;
     }
 
     /**
      * 온보딩을 완료한다. PUT이라 여러 번 불러도 같은 결과를 남긴다.
      *
-     * <p>같은 동의 버전으로 다시 부르면 최초 동의 시각을 유지하고, 다른 버전이면 새 이력을 남긴다.
-     * 알림 설정은 항상 최신 요청으로 덮어쓴다.
+     * <p>동의 버전은 서버가 들고 있는 활성 버전과 같을 때만 받는다. 클라이언트가 보낸 문자열을
+     * 그대로 저장하면 서버가 알지 못하는 버전이 동의 증빙으로 남는다.
+     *
+     * <p>트랜잭션을 여기 걸지 않는 이유는 재시도 때문이다. 아래 설명대로 유니크 제약에 걸린
+     * 트랜잭션은 되돌아간 뒤에야 다시 읽을 수 있다.
      */
-    @Transactional
     public OnboardingResponse complete(AuthenticatedUser principal, OnboardingRequest request) {
-        UUID userId = principal.userId();
-        LocalDateTime now = LocalDateTime.now(clock);
+        if (!onboardingProperties.isActive(request.consentVersion())) {
+            throw new BusinessException(ErrorCode.CONSENT_VERSION_NOT_ACCEPTED);
+        }
 
-        UserConsent consent = saveConsent(userId, request.consentVersion(), now);
-        NotificationSetting notificationSetting = saveNotificationSetting(userId, request);
-        LocalDateTime completedAt = authService.completeSignup(principal, now);
-
-        return OnboardingResponse.from(consent, notificationSetting, completedAt);
-    }
-
-    /**
-     * 요청이 담은 동의는 민감정보 동의 하나뿐이라 그 종류로만 이력을 남긴다.
-     * 사용자가 보내지 않은 동의를 서버가 대신 기록하지 않는다.
-     */
-    private UserConsent saveConsent(UUID userId, String consentVersion, LocalDateTime now) {
-        return userConsentRepository
-                .findByUserIdAndConsentTypeAndConsentVersion(userId, ConsentType.SENSITIVE_DATA, consentVersion)
-                .orElseGet(() -> userConsentRepository.save(
-                        UserConsent.accept(userId, ConsentType.SENSITIVE_DATA, consentVersion, now)
-                ));
-    }
-
-    private NotificationSetting saveNotificationSetting(UUID userId, OnboardingRequest request) {
-        return notificationSettingRepository.findById(userId)
-                .map(existing -> {
-                    existing.update(request.notificationEnabled(), request.notificationPermission());
-                    return existing;
-                })
-                .orElseGet(() -> notificationSettingRepository.save(NotificationSetting.create(
-                        userId,
-                        request.notificationEnabled(),
-                        request.notificationPermission()
-                )));
+        try {
+            return onboardingWriter.complete(principal, request);
+        } catch (DataIntegrityViolationException raced) {
+            // 같은 사용자의 첫 PUT이 겹치면 둘 다 "저장된 것이 없다"를 보고 각자 넣으려 한다.
+            // 뒤늦은 쪽이 uq_user_consents_version이나 notification_settings 기본 키에 걸리는데,
+            // 이때 이미 먼저 저장된 값이 있으므로 트랜잭션을 새로 열어 다시 읽으면 같은 응답이 나간다.
+            // 재시도는 한 번뿐이다. 두 번째도 실패하면 제약 위반의 원인이 경합이 아니라는 뜻이다.
+            return onboardingWriter.complete(principal, request);
+        }
     }
 }

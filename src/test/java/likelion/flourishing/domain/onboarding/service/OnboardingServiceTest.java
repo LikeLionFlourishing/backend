@@ -1,9 +1,11 @@
 package likelion.flourishing.domain.onboarding.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,6 +25,9 @@ import likelion.flourishing.domain.onboarding.entity.NotificationSetting;
 import likelion.flourishing.domain.onboarding.entity.UserConsent;
 import likelion.flourishing.domain.onboarding.repository.NotificationSettingRepository;
 import likelion.flourishing.domain.onboarding.repository.UserConsentRepository;
+import likelion.flourishing.global.config.OnboardingProperties;
+import likelion.flourishing.global.exception.BusinessException;
+import likelion.flourishing.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +36,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.dao.DataIntegrityViolationException;
 
 /**
  * OnboardingService의 저장 규칙 테스트. DB 없이 가짜 저장소와 고정 시계로만 돌린다.
@@ -70,15 +76,18 @@ class OnboardingServiceTest {
 
     @BeforeEach
     void setUp() {
-        onboardingService = new OnboardingService(
+        // 저장 단계는 진짜 OnboardingWriter를 쓰고 저장소만 가짜로 둔다. 두 클래스를 나눈 것은
+        // 트랜잭션 경계 때문이지 규칙이 갈린 것이 아니라, 규칙 검증은 이어서 하는 편이 낫다.
+        OnboardingWriter onboardingWriter = new OnboardingWriter(
                 authService,
                 userConsentRepository,
                 notificationSettingRepository,
                 Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC)
         );
+        onboardingService = new OnboardingService(new OnboardingProperties(CONSENT_VERSION), onboardingWriter);
 
-        when(userConsentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
-        when(notificationSettingRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userConsentRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationSettingRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(authService.completeSignup(any(), any())).thenReturn(NOW);
     }
 
@@ -106,7 +115,7 @@ class OnboardingServiceTest {
         onboardingService.complete(principal(), request(true, NotificationPermission.GRANTED));
 
         ArgumentCaptor<UserConsent> captor = ArgumentCaptor.forClass(UserConsent.class);
-        verify(userConsentRepository).save(captor.capture());
+        verify(userConsentRepository).saveAndFlush(captor.capture());
 
         List<UserConsent> saved = captor.getAllValues();
         assertThat(saved).hasSize(1);
@@ -134,7 +143,7 @@ class OnboardingServiceTest {
         OnboardingResponse response = onboardingService.complete(principal(), request(true, NotificationPermission.GRANTED));
 
         assertThat(response.getConsentedAt()).isEqualTo(firstConsentedAt.atOffset(ZoneOffset.UTC));
-        verify(userConsentRepository, never()).save(any());
+        verify(userConsentRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -149,7 +158,7 @@ class OnboardingServiceTest {
         assertThat(existing.isEnabled()).isFalse();
         assertThat(existing.getPermissionState()).isEqualTo(NotificationPermission.DENIED);
         assertThat(response.isNotificationEnabled()).isFalse();
-        verify(notificationSettingRepository, never()).save(any());
+        verify(notificationSettingRepository, never()).saveAndFlush(any());
     }
 
     /** 알림을 켜겠다는 의사와 브라우저 권한은 별개라 거부 상태여도 그대로 저장한다. */
@@ -174,6 +183,68 @@ class OnboardingServiceTest {
         onboardingService.complete(principal(), request(true, NotificationPermission.GRANTED));
 
         verify(authService).completeSignup(any(AuthenticatedUser.class), eq(NOW));
+    }
+
+    /**
+     * 동의 증빙은 서버가 아는 문구여야 의미가 있다. 서버가 들고 있는 활성 버전이 아니면
+     * 이력을 남기지 않고 가입 완료도 하지 않는다.
+     */
+    @Test
+    void completeRejectsConsentVersionServerIsNotCollecting() {
+        OnboardingRequest outdated = new OnboardingRequest(
+                "2020-01-01", true, true, NotificationPermission.GRANTED
+        );
+
+        assertThatThrownBy(() -> onboardingService.complete(principal(), outdated))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CONSENT_VERSION_NOT_ACCEPTED);
+
+        verify(userConsentRepository, never()).saveAndFlush(any());
+        verify(authService, never()).completeSignup(any(), any());
+    }
+
+    /**
+     * 같은 사용자의 첫 PUT이 겹치면 둘 다 저장된 것이 없다고 보고 각자 넣으려 한다. 뒤늦은 쪽은
+     * 유니크 제약에 걸리는데, 그때는 이미 먼저 저장된 값이 있으므로 다시 읽어 같은 응답을 돌려준다.
+     * 재시도가 없으면 이 자리가 그대로 500이 된다.
+     */
+    @Test
+    void completeReturnsFirstWriterResultWhenConcurrentInsertLoses() {
+        LocalDateTime firstConsentedAt = NOW.minusMinutes(1);
+        UserConsent winner = UserConsent.accept(
+                USER_ID, ConsentType.SENSITIVE_DATA, CONSENT_VERSION, firstConsentedAt
+        );
+        // 첫 시도에는 아무것도 안 보이고, 되돌아간 뒤 다시 읽으면 먼저 저장된 행이 보인다.
+        when(userConsentRepository.findByUserIdAndConsentTypeAndConsentVersion(any(), any(), any()))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(winner));
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(userConsentRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("uq_user_consents_version"));
+
+        OnboardingResponse response = onboardingService.complete(
+                principal(), request(true, NotificationPermission.GRANTED)
+        );
+
+        assertThat(response.getConsentedAt()).isEqualTo(firstConsentedAt.atOffset(ZoneOffset.UTC));
+        verify(userConsentRepository, times(1)).saveAndFlush(any());
+    }
+
+    /** 두 번째도 제약에 걸리면 경합이 원인이 아니므로 더 시도하지 않고 그대로 올린다. */
+    @Test
+    void completeGivesUpWhenRetryHitsTheSameConflict() {
+        when(userConsentRepository.findByUserIdAndConsentTypeAndConsentVersion(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(userConsentRepository.saveAndFlush(any()))
+                .thenThrow(new DataIntegrityViolationException("uq_user_consents_version"));
+
+        assertThatThrownBy(() -> onboardingService.complete(
+                principal(), request(true, NotificationPermission.GRANTED)
+        )).isInstanceOf(DataIntegrityViolationException.class);
+
+        verify(userConsentRepository, times(2)).saveAndFlush(any());
     }
 
     private AuthenticatedUser principal() {
