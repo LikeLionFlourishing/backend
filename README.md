@@ -27,8 +27,28 @@ cp .env.example .env
 ```
 
 `.env`의 `DB_PASSWORD`를 로컬에서 사용할 값으로 변경하고,
-`RECORD_DATA_ENCRYPTION_KEY`에는 `openssl rand -base64 32`로 생성한 값을 입력합니다.
+`RECORD_DATA_ENCRYPTION_KEY`와 `PUSH_DATA_ENCRYPTION_KEY`에는 각각
+`openssl rand -base64 32`로 생성한 값을 입력합니다.
 실제 비밀값은 Git에 커밋하지 않습니다.
+
+Web Push 알림을 실제로 발송하려면 VAPID 키도 필요합니다. 키가 비어 있으면 애플리케이션은
+정상 기동하고 17:30 발송 작업만 건너뜁니다.
+
+```bash
+# P-256 키 쌍 생성
+openssl ecparam -name prime256v1 -genkey -noout -out vapid.pem
+
+# VAPID_PUBLIC_KEY (비압축 65바이트 base64url)
+openssl ec -in vapid.pem -pubout -outform DER \
+  | tail -c 65 | basenc --base64url | tr -d '=\n'
+
+# VAPID_PRIVATE_KEY (32바이트 스칼라 base64url)
+openssl ec -in vapid.pem -outform DER \
+  | tail -c +8 | head -c 32 | basenc --base64url | tr -d '=\n'
+```
+
+`VAPID_SUBJECT`에는 push 서비스가 연락할 수 있는 `mailto:` 또는 `https:` URI를 넣습니다.
+`vapid.pem`은 커밋하지 않고 삭제하거나 비밀 저장소로 옮깁니다.
 
 ### 2. MySQL과 Redis 실행
 
@@ -100,6 +120,10 @@ DB_PASSWORD=<비밀번호> docker compose --profile app up --build
 | `REDIS_PORT` | Redis 포트 | `6379` |
 | `FRONTEND_ALLOWED_ORIGINS` | 허용할 프론트엔드 Origin 목록 | `http://localhost:5173` |
 | `RECORD_DATA_ENCRYPTION_KEY` | 피부 기록 원문 암호화·목록 커서 서명용 Base64 32바이트 마스터 키 | 없음(필수) |
+| `PUSH_DATA_ENCRYPTION_KEY` | Push 구독 암호화·endpoint 지문용 Base64 32바이트 마스터 키 | 없음(필수) |
+| `VAPID_PUBLIC_KEY` | VAPID 공개키(비압축 65바이트 base64url) | 없음(발송 시 필요) |
+| `VAPID_PRIVATE_KEY` | VAPID 비밀키(32바이트 스칼라 base64url) | 없음(발송 시 필요) |
+| `VAPID_SUBJECT` | VAPID subject(`mailto:` 또는 `https:` URI) | 없음(발송 시 필요) |
 | `SERVER_PORT` | 애플리케이션 포트 | `8080` |
 
 ## 데이터베이스

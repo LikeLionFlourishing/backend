@@ -66,6 +66,21 @@ app:
       # 32바이트 마스터 키를 Base64로 인코딩한 값. 원문 암호화 키와 커서 서명 키를 분리 파생한다.
       master-key: ${RECORD_DATA_ENCRYPTION_KEY:}
 
+  notifications:
+    crypto:
+      # 32바이트 마스터 키를 Base64로 인코딩한 값. 구독 암호화 키와 endpoint 지문 키를 분리 파생한다.
+      master-key: ${PUSH_DATA_ENCRYPTION_KEY:}
+    push:
+      vapid:
+        # 비압축 65바이트 공개키와 32바이트 비밀키를 각각 패딩 없는 base64url로 인코딩한 값.
+        # 비어 있으면 애플리케이션은 뜨고 17:30 발송 작업만 건너뛴다.
+        public-key: ${VAPID_PUBLIC_KEY:}
+        private-key: ${VAPID_PRIVATE_KEY:}
+        subject: ${VAPID_SUBJECT:}
+      ttl: 1h
+      connect-timeout: 3s
+      read-timeout: 5s
+
 springdoc:
   api-docs:
     path: /v3/api-docs

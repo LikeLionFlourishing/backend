@@ -57,6 +57,9 @@ class SkinReportQueryMySqlIntegrationTest {
         registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
         registry.add("app.records.crypto.master-key",
                 () -> "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+        // 알림 도메인 빈도 컨텍스트에 함께 뜨고, 마스터 키가 없으면 기동을 막는다.
+        registry.add("app.notifications.crypto.master-key",
+                () -> "OTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTBmZWRjYmE=");
     }
 
     @Autowired
