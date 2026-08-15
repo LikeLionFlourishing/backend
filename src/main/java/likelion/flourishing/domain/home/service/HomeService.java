@@ -14,6 +14,7 @@ import likelion.flourishing.domain.home.dto.response.SkinReportSummaryResponse;
 import likelion.flourishing.domain.home.entity.HomePriority;
 import likelion.flourishing.domain.home.repository.DailyCheckInRepository;
 import likelion.flourishing.domain.home.repository.HomeReportQueryRepository;
+import likelion.flourishing.domain.home.repository.HomeReportQueryRepository.PendingFollowUpRow;
 import likelion.flourishing.domain.home.repository.HomeReportQueryRepository.RecentReportRow;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
@@ -48,15 +49,27 @@ public class HomeService {
         this.clock = clock;
     }
 
+    /**
+     * 홈 화면에 필요한 것을 모아 돌려준다.
+     *
+     * <p>아직 입력할 수 없는 경과도 pendingFollowUp에는 담는다. 명세가 availableFrom을 필수로
+     * 둔 이유가 "언제부터 쓸 수 있는지"를 프런트가 안내하게 하려는 것이라, 사전 안내 카드를
+     * 없애지 않는다. 다만 priority는 지금 실제로 열 수 있는 것만 FOLLOW_UP으로 고른다.
+     * 서버가 최우선이라고 한 항목을 눌렀는데 아직 입력할 수 없으면 그것이 곧 오동작이다.
+     */
     @Transactional(readOnly = true)
     public HomeResponse getHome(AuthenticatedUser principal) {
         UUID userId = principal.userId();
         LocalDate serverDate = today();
+        LocalDateTime now = LocalDateTime.now(clock);
 
-        PendingFollowUpResponse pendingFollowUp = homeReportQueryRepository
-                .findOldestPendingFollowUp(userId, LocalDateTime.now(clock))
-                .map(PendingFollowUpResponse::from)
+        PendingFollowUpRow pendingRow = homeReportQueryRepository
+                .findOldestPendingFollowUp(userId, now)
                 .orElse(null);
+        PendingFollowUpResponse pendingFollowUp = pendingRow == null
+                ? null
+                : PendingFollowUpResponse.from(pendingRow);
+        boolean followUpOpen = pendingRow != null && !now.isBefore(pendingRow.availableFrom());
 
         DailyCheckInResponse todayCheckIn = dailyCheckInRepository
                 .findByUserIdAndCheckInDate(userId, serverDate)
@@ -70,7 +83,7 @@ public class HomeService {
 
         return HomeResponse.of(
                 serverDate,
-                resolvePriority(pendingFollowUp, todayCheckIn, recentReport),
+                resolvePriority(followUpOpen, todayCheckIn, recentReport),
                 pendingFollowUp,
                 todayCheckIn,
                 recentReport
@@ -113,12 +126,16 @@ public class HomeService {
         return LocalDate.now(clock.withZone(SERVICE_ZONE));
     }
 
+    /**
+     * @param followUpOpen 미완료 경과가 있고 지금 입력할 수 있으면 참. 있기만 한 것으로는
+     *                     최우선이 되지 않는다. 입력 시작 전 카드는 안내일 뿐 할 일이 아니다.
+     */
     private HomePriority resolvePriority(
-            PendingFollowUpResponse pendingFollowUp,
+            boolean followUpOpen,
             DailyCheckInResponse todayCheckIn,
             SkinReportSummaryResponse recentReport
     ) {
-        if (pendingFollowUp != null) {
+        if (followUpOpen) {
             return HomePriority.FOLLOW_UP;
         }
         if (todayCheckIn != null) {

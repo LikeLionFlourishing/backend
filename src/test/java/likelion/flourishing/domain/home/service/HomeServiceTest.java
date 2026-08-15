@@ -3,6 +3,7 @@ package likelion.flourishing.domain.home.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -77,9 +78,13 @@ class HomeServiceTest {
                 new DailyCheckInWriter(dailyCheckInRepository),
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );
-        when(homeReportQueryRepository.findOldestPendingFollowUp(any(), any())).thenReturn(Optional.empty());
-        when(homeReportQueryRepository.findMostRecentReport(any())).thenReturn(Optional.empty());
-        when(dailyCheckInRepository.findByUserIdAndCheckInDate(any(), any())).thenReturn(Optional.empty());
+        // 조회 스텁을 USER_ID로 고정한다. any()로 두면 principal.userId() 대신 sessionId()를
+        // 넘기도록 바뀌어도 테스트가 그대로 통과한다. 둘 다 UUID라 타입으로도 걸리지 않는다.
+        when(homeReportQueryRepository.findOldestPendingFollowUp(eq(USER_ID), any()))
+                .thenReturn(Optional.empty());
+        when(homeReportQueryRepository.findMostRecentReport(eq(USER_ID))).thenReturn(Optional.empty());
+        when(dailyCheckInRepository.findByUserIdAndCheckInDate(eq(USER_ID), any()))
+                .thenReturn(Optional.empty());
         when(homeReportQueryRepository.findAppearanceCodes(any())).thenReturn(List.of("REDNESS"));
         when(homeReportQueryRepository.findSensationCodes(any())).thenReturn(List.of("ITCHING"));
         when(homeReportQueryRepository.findSituationCodes(any())).thenReturn(List.of("SHAVING"));
@@ -103,12 +108,12 @@ class HomeServiceTest {
     }
 
     @Test
-    void priorityIsFollowUpWhenPendingFollowUpExists() {
-        when(homeReportQueryRepository.findOldestPendingFollowUp(any(), any()))
-                .thenReturn(Optional.of(pendingFollowUpRow()));
-        when(dailyCheckInRepository.findByUserIdAndCheckInDate(any(), any()))
+    void priorityIsFollowUpWhenPendingFollowUpIsSubmittable() {
+        when(homeReportQueryRepository.findOldestPendingFollowUp(eq(USER_ID), any()))
+                .thenReturn(Optional.of(openPendingFollowUpRow()));
+        when(dailyCheckInRepository.findByUserIdAndCheckInDate(eq(USER_ID), any()))
                 .thenReturn(Optional.of(persisted(DailyCheckIn.noDiscomfort(USER_ID, SEOUL_TODAY))));
-        when(homeReportQueryRepository.findMostRecentReport(any())).thenReturn(Optional.of(recentReportRow()));
+        when(homeReportQueryRepository.findMostRecentReport(eq(USER_ID))).thenReturn(Optional.of(recentReportRow()));
 
         HomeResponse response = homeService.getHome(principal());
 
@@ -118,9 +123,9 @@ class HomeServiceTest {
 
     @Test
     void priorityIsTodayCheckInWhenNoFollowUpButTodaySaved() {
-        when(dailyCheckInRepository.findByUserIdAndCheckInDate(any(), any()))
+        when(dailyCheckInRepository.findByUserIdAndCheckInDate(eq(USER_ID), any()))
                 .thenReturn(Optional.of(persisted(DailyCheckIn.noDiscomfort(USER_ID, SEOUL_TODAY))));
-        when(homeReportQueryRepository.findMostRecentReport(any())).thenReturn(Optional.of(recentReportRow()));
+        when(homeReportQueryRepository.findMostRecentReport(eq(USER_ID))).thenReturn(Optional.of(recentReportRow()));
 
         HomeResponse response = homeService.getHome(principal());
 
@@ -131,7 +136,7 @@ class HomeServiceTest {
 
     @Test
     void priorityIsRecentRecordWhenOnlyPastRecordExists() {
-        when(homeReportQueryRepository.findMostRecentReport(any())).thenReturn(Optional.of(recentReportRow()));
+        when(homeReportQueryRepository.findMostRecentReport(eq(USER_ID))).thenReturn(Optional.of(recentReportRow()));
 
         HomeResponse response = homeService.getHome(principal());
 
@@ -244,20 +249,39 @@ class HomeServiceTest {
     }
 
     /**
-     * 아직 입력할 수 없는 경과도 홈 최우선으로 보여 준다. 명세 PendingFollowUp이 availableFrom을
-     * 필수로 담는 이유가 이것이고, 언제부터 쓸 수 있는지는 프런트가 그 값으로 판단한다.
-     * 정책이 "입력 가능한 것만 보여 준다"로 바뀌면 이 테스트가 먼저 깨진다.
+     * 아직 입력할 수 없는 경과는 카드로는 보여 주되 최우선으로 고르지 않는다. 명세 PendingFollowUp이
+     * availableFrom을 필수로 담는 이유가 사전 안내이고, 서버가 최우선이라고 한 항목을 눌렀는데
+     * 아직 입력할 수 없으면 그것이 곧 오동작이다.
      */
     @Test
-    void pendingFollowUpIsShownBeforeItBecomesSubmittable() {
-        when(homeReportQueryRepository.findOldestPendingFollowUp(any(), any()))
+    void pendingFollowUpIsAnnouncedButNotPrioritizedBeforeItOpens() {
+        when(homeReportQueryRepository.findOldestPendingFollowUp(eq(USER_ID), any()))
                 .thenReturn(Optional.of(pendingFollowUpRow()));
 
         HomeResponse response = homeService.getHome(principal());
 
-        assertThat(response.getPriority()).isEqualTo(HomePriority.FOLLOW_UP);
+        assertThat(response.getPendingFollowUp()).isNotNull();
         assertThat(response.getPendingFollowUp().getAvailableFrom())
                 .isAfter(NOW.atOffset(ZoneOffset.UTC));
+        assertThat(response.getPriority()).isEqualTo(HomePriority.EMPTY);
+    }
+
+    /** 입력 시작 시각 정각부터 최우선이 된다. */
+    @Test
+    void pendingFollowUpBecomesPriorityExactlyAtAvailableTime() {
+        when(homeReportQueryRepository.findOldestPendingFollowUp(eq(USER_ID), any())).thenReturn(Optional.of(
+                new PendingFollowUpRow(
+                        REPORT_ID,
+                        SEOUL_TODAY.minusDays(1),
+                        LocalDateTime.ofInstant(NOW, ZoneOffset.UTC),
+                        LocalDateTime.of(2026, 8, 14, 0, 0),
+                        "SELF_CARE_GUIDE"
+                )
+        ));
+
+        HomeResponse response = homeService.getHome(principal());
+
+        assertThat(response.getPriority()).isEqualTo(HomePriority.FOLLOW_UP);
     }
 
     private AuthenticatedUser principal() {
@@ -278,6 +302,17 @@ class HomeServiceTest {
                 REPORT_ID,
                 SEOUL_TODAY.minusDays(1),
                 LocalDateTime.of(2026, 8, 12, 0, 0),
+                LocalDateTime.of(2026, 8, 14, 0, 0),
+                "SELF_CARE_GUIDE"
+        );
+    }
+
+    /** 이미 입력할 수 있는 경과. availableFrom이 고정 시계보다 앞선다. */
+    private PendingFollowUpRow openPendingFollowUpRow() {
+        return new PendingFollowUpRow(
+                REPORT_ID,
+                SEOUL_TODAY.minusDays(1),
+                LocalDateTime.of(2026, 8, 11, 0, 0),
                 LocalDateTime.of(2026, 8, 14, 0, 0),
                 "SELF_CARE_GUIDE"
         );
