@@ -1,10 +1,10 @@
-package likelion.flourishing.referencedata.service;
+package likelion.flourishing.domain.referencedata.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import likelion.flourishing.referencedata.dto.response.OptionResponse;
-import likelion.flourishing.referencedata.dto.response.SkinReportOptionsResponse;
+import likelion.flourishing.domain.referencedata.dto.response.OptionResponse;
+import likelion.flourishing.domain.referencedata.dto.response.SkinReportOptionsResponse;
 import org.junit.jupiter.api.Test;
 
 class ReferenceDataServiceTest {

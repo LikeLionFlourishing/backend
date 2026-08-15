@@ -1,4 +1,4 @@
-package likelion.flourishing.report.domain;
+package likelion.flourishing.domain.report.entity;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

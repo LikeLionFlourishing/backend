@@ -1,9 +1,9 @@
-package likelion.flourishing.referencedata.controller;
+package likelion.flourishing.domain.referencedata.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import likelion.flourishing.referencedata.dto.response.SkinReportOptionsResponse;
-import likelion.flourishing.referencedata.service.ReferenceDataService;
+import likelion.flourishing.domain.referencedata.dto.response.SkinReportOptionsResponse;
+import likelion.flourishing.domain.referencedata.service.ReferenceDataService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

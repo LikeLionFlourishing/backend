@@ -1,4 +1,4 @@
-package likelion.flourishing.referencedata.controller;
+package likelion.flourishing.domain.referencedata.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import likelion.flourishing.global.config.CorsProperties;
 import likelion.flourishing.global.config.SecurityConfig;
-import likelion.flourishing.referencedata.service.ReferenceDataService;
+import likelion.flourishing.domain.referencedata.service.ReferenceDataService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

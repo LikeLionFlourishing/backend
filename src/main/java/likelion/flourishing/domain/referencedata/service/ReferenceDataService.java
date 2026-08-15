@@ -1,15 +1,15 @@
-package likelion.flourishing.referencedata.service;
+package likelion.flourishing.domain.referencedata.service;
 
 import java.util.Arrays;
 import java.util.List;
-import likelion.flourishing.referencedata.dto.response.OptionResponse;
-import likelion.flourishing.referencedata.dto.response.SkinReportOptionsResponse;
-import likelion.flourishing.report.domain.Appearance;
-import likelion.flourishing.report.domain.BodyArea;
-import likelion.flourishing.report.domain.CareAvailability;
-import likelion.flourishing.report.domain.PreCareCheck;
-import likelion.flourishing.report.domain.Sensation;
-import likelion.flourishing.report.domain.Situation;
+import likelion.flourishing.domain.referencedata.dto.response.OptionResponse;
+import likelion.flourishing.domain.referencedata.dto.response.SkinReportOptionsResponse;
+import likelion.flourishing.domain.report.entity.Appearance;
+import likelion.flourishing.domain.report.entity.BodyArea;
+import likelion.flourishing.domain.report.entity.CareAvailability;
+import likelion.flourishing.domain.report.entity.PreCareCheck;
+import likelion.flourishing.domain.report.entity.Sensation;
+import likelion.flourishing.domain.report.entity.Situation;
 import org.springframework.stereotype.Service;
 
 @Service

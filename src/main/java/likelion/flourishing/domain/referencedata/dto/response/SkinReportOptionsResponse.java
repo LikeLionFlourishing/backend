@@ -1,4 +1,4 @@
-package likelion.flourishing.referencedata.dto.response;
+package likelion.flourishing.domain.referencedata.dto.response;
 
 import java.util.List;
 import lombok.AccessLevel;

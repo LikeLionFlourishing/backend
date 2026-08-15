@@ -1,4 +1,4 @@
-package likelion.flourishing.report.domain;
+package likelion.flourishing.domain.report.entity;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
