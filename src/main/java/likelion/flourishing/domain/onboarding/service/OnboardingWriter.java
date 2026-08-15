@@ -13,6 +13,7 @@ import likelion.flourishing.domain.onboarding.entity.UserConsent;
 import likelion.flourishing.domain.onboarding.repository.NotificationSettingRepository;
 import likelion.flourishing.domain.onboarding.repository.UserConsentRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -21,6 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>별도 빈으로 둔 이유는 트랜잭션 경계 때문이다. 유니크 제약에 걸린 트랜잭션은 되돌아가야
  * 다시 읽을 수 있는데, 같은 클래스 안에서 자기 메서드를 부르면 프록시를 지나지 않아 새 트랜잭션이
  * 열리지 않는다. {@link OnboardingService}가 이 빈을 통해 불러야 재시도가 성립한다.
+ *
+ * <p>전파를 REQUIRES_NEW로 못 박은 이유도 같다. 프록시를 지나는 것과 새 트랜잭션이 열리는 것은
+ * 별개이고, 기본값인 REQUIRED는 호출자에 트랜잭션이 없을 때만 새로 연다. 나중에 상위에
+ * {@code @Transactional}이 붙으면 첫 시도의 제약 위반이 그 트랜잭션을 rollback-only로 표시해
+ * 재시도가 죽은 트랜잭션에서 돌게 된다. 재시도가 이 빈의 존재 이유라 전파를 조건에 맡기지 않는다.
  */
 @Component
 public class OnboardingWriter {
@@ -48,7 +54,7 @@ public class OnboardingWriter {
      * <p>같은 동의 버전으로 다시 부르면 최초 동의 시각을 유지하고, 알림 설정은 항상 최신 요청으로
      * 덮어쓴다. 세 가지가 한 트랜잭션에서 함께 커밋되어야 동의 없이 가입만 완료된 상태가 남지 않는다.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OnboardingResponse complete(AuthenticatedUser principal, OnboardingRequest request) {
         UUID userId = principal.userId();
         LocalDateTime now = LocalDateTime.now(clock);
