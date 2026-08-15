@@ -7,6 +7,9 @@ import likelion.flourishing.domain.followup.dto.response.FollowUpResponse;
 import likelion.flourishing.domain.followup.repository.FollowUpRepository;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 /** 다음 날 경과 조회와 저장. */
 @Service
 public class FollowUpService {
+
+    private static final Logger log = LoggerFactory.getLogger(FollowUpService.class);
 
     private final FollowUpRepository followUpRepository;
     private final FollowUpWriter followUpWriter;
@@ -51,10 +56,16 @@ public class FollowUpService {
         UUID userId = principal.userId();
         try {
             return followUpWriter.saveFollowUp(userId, reportId, request);
-        } catch (DataIntegrityViolationException raced) {
+        } catch (DataIntegrityViolationException | ConcurrencyFailureException raced) {
             // 재시도 때는 먼저 저장된 경과가 보인다. 같은 내용이면 200, 다른 내용이면 409가 되어
             // 겹치지 않았을 때와 같은 결과가 나간다. 재시도는 한 번뿐이고, 두 번째도 제약에
             // 걸리면 원인이 경합이 아니라는 뜻이라 그대로 올린다.
+            //
+            // 유니크 위반만 잡지 않는 이유는, 지는 쪽 INSERT가 이긴 쪽이 커밋할 때까지 대기하다가
+            // 잠금 대기 시간을 넘기거나 서로 물릴 수 있기 때문이다. 이긴 쪽이 같은 트랜잭션에서
+            // markCompleted까지 하고 커밋하므로 대기 구간이 짧다고 보기도 어렵다.
+            // 둘 다 ConcurrencyFailureException 계열이라 따로 받지 않으면 그대로 500이 된다.
+            log.warn("경과 저장이 경합으로 실패해 한 번 더 시도합니다. type={}", raced.getClass().getSimpleName());
             return followUpWriter.saveFollowUp(userId, reportId, request);
         }
     }
