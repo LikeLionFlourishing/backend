@@ -1,7 +1,5 @@
 package likelion.flourishing.domain.notification.service;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -37,20 +35,22 @@ public class PushSubscriptionService {
 
     private static final int MAX_USER_AGENT_LENGTH = 512;
     private static final String UNKNOWN_USER_AGENT = "unknown";
-    private static final String HTTPS = "https";
 
     private final PushSubscriptionRepository pushSubscriptionRepository;
     private final PushSecretCipher pushSecretCipher;
     private final EndpointFingerprint endpointFingerprint;
+    private final PushEndpointPolicy pushEndpointPolicy;
 
     public PushSubscriptionService(
             PushSubscriptionRepository pushSubscriptionRepository,
             PushSecretCipher pushSecretCipher,
-            EndpointFingerprint endpointFingerprint
+            EndpointFingerprint endpointFingerprint,
+            PushEndpointPolicy pushEndpointPolicy
     ) {
         this.pushSubscriptionRepository = pushSubscriptionRepository;
         this.pushSecretCipher = pushSecretCipher;
         this.endpointFingerprint = endpointFingerprint;
+        this.pushEndpointPolicy = pushEndpointPolicy;
     }
 
     @Transactional
@@ -59,7 +59,7 @@ public class PushSubscriptionService {
             RegisterPushSubscriptionRequest request,
             String userAgent
     ) {
-        String endpoint = requireHttpsEndpoint(request.endpoint());
+        String endpoint = requireAllowedEndpoint(request.endpoint());
         byte[] userAgentPublicKey = requirePublicKey(request.keys().p256dh());
         byte[] authSecret = requireAuthSecret(request.keys().auth());
 
@@ -106,16 +106,17 @@ public class PushSubscriptionService {
         pushSubscriptionRepository.delete(subscription);
     }
 
-    private String requireHttpsEndpoint(String endpoint) {
-        try {
-            URI uri = new URI(endpoint);
-            if (!HTTPS.equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-            }
-            return endpoint;
-        } catch (URISyntaxException exception) {
+    /**
+     * endpoint가 우리가 실제로 요청을 보낼 수 있는 주소인지 확인한다.
+     *
+     * <p>스킴만 보면 사용자가 내부망 주소를 등록해 스케줄러로 하여금 그곳에 POST하게 만들 수 있다.
+     * 판단 기준은 {@link PushEndpointPolicy}에 모아 두었다.
+     */
+    private String requireAllowedEndpoint(String endpoint) {
+        if (!pushEndpointPolicy.isAllowed(endpoint)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR);
         }
+        return endpoint;
     }
 
     /** 브라우저가 준 p256dh는 비압축 65바이트여야 하고 P-256 곡선 위의 점이어야 한다. */

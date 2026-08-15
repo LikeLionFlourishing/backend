@@ -57,9 +57,9 @@ class NotificationSettingsServiceTest {
         NotificationSettingsResponse response = service.getSettings(principal());
 
         assertThat(response.isEnabled()).isTrue();
-        assertThat(response.getNotificationTime()).isEqualTo("17:30");
+        assertThat(response.getTime()).isEqualTo("17:30");
         assertThat(response.getTimezone()).isEqualTo("Asia/Seoul");
-        assertThat(response.getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
+        assertThat(response.getPermission()).isEqualTo(NotificationPermission.GRANTED);
         assertThat(response.getActiveSubscriptionCount()).isEqualTo(2L);
     }
 
@@ -71,8 +71,7 @@ class NotificationSettingsServiceTest {
         NotificationSettingsResponse response = service.getSettings(principal());
 
         assertThat(response.isEnabled()).isFalse();
-        assertThat(response.getPermissionState()).isEqualTo(NotificationPermission.DEFAULT);
-        assertThat(response.getUpdatedAt()).isNull();
+        assertThat(response.getPermission()).isEqualTo(NotificationPermission.DEFAULT);
         verify(notificationSettingRepository, never()).saveAndFlush(any());
     }
 
@@ -122,7 +121,7 @@ class NotificationSettingsServiceTest {
         );
 
         assertThat(response.isEnabled()).isTrue();
-        assertThat(response.getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
+        assertThat(response.getPermission()).isEqualTo(NotificationPermission.GRANTED);
         verify(notificationSettingRepository).saveAndFlush(any(NotificationSetting.class));
     }
 
@@ -136,7 +135,7 @@ class NotificationSettingsServiceTest {
         );
 
         assertThat(response.isEnabled()).isTrue();
-        assertThat(response.getPermissionState()).isEqualTo(NotificationPermission.DENIED);
+        assertThat(response.getPermission()).isEqualTo(NotificationPermission.DENIED);
         assertThat(response.getActiveSubscriptionCount()).isZero();
     }
 

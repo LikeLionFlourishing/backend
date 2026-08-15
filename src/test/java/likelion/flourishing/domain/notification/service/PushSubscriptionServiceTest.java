@@ -14,6 +14,7 @@ import java.security.interfaces.ECPublicKey;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
@@ -25,6 +26,7 @@ import likelion.flourishing.domain.notification.dto.request.RegisterPushSubscrip
 import likelion.flourishing.domain.notification.entity.PushSubscription;
 import likelion.flourishing.domain.notification.repository.PushSubscriptionRepository;
 import likelion.flourishing.domain.notification.webpush.P256Keys;
+import likelion.flourishing.domain.notification.webpush.PushNotificationProperties;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,7 +63,14 @@ class PushSubscriptionServiceTest {
         NotificationCryptoProperties properties = new NotificationCryptoProperties(TEST_KEY);
         pushSecretCipher = new PushSecretCipher(properties);
         endpointFingerprint = new EndpointFingerprint(properties);
-        service = new PushSubscriptionService(pushSubscriptionRepository, pushSecretCipher, endpointFingerprint);
+        // 호스트 allowlist를 비워 두면 사설·loopback 대역만 막는다. 이 스위트는 저장 규칙을 보므로
+        // 테스트용 호스트를 쓰고, allowlist 동작은 PushEndpointPolicyTest가 따로 검증한다.
+        service = new PushSubscriptionService(
+                pushSubscriptionRepository,
+                pushSecretCipher,
+                endpointFingerprint,
+                new PushEndpointPolicy(new PushNotificationProperties(null, null, null, null, List.of()))
+        );
 
         KeyPair browserKeyPair = P256Keys.generateKeyPair();
         p256dh = encode(P256Keys.uncompressed((ECPublicKey) browserKeyPair.getPublic()));

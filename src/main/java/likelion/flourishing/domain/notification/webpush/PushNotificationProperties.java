@@ -1,6 +1,7 @@
 package likelion.flourishing.domain.notification.webpush;
 
 import java.time.Duration;
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -14,14 +15,31 @@ public record PushNotificationProperties(
         Vapid vapid,
         Duration ttl,
         Duration connectTimeout,
-        Duration readTimeout
+        Duration readTimeout,
+        List<String> allowedEndpointHosts
 ) {
+
+    /**
+     * 등록을 허용하는 push 서비스 호스트. 목록이 비면 호스트 제한 없이 사설·loopback 대역만 막는다.
+     *
+     * <p>브라우저별 endpoint 호스트다. Chrome·Edge는 FCM, Firefox는 Mozilla autopush,
+     * Safari는 Apple, 구형 Edge는 WNS를 쓴다.
+     */
+    private static final List<String> DEFAULT_ALLOWED_ENDPOINT_HOSTS = List.of(
+            "fcm.googleapis.com",
+            "push.services.mozilla.com",
+            "web.push.apple.com",
+            "notify.windows.com"
+    );
 
     public PushNotificationProperties {
         vapid = vapid == null ? new Vapid(null, null, null) : vapid;
         ttl = ttl == null ? Duration.ofHours(1) : ttl;
         connectTimeout = connectTimeout == null ? Duration.ofSeconds(3) : connectTimeout;
         readTimeout = readTimeout == null ? Duration.ofSeconds(5) : readTimeout;
+        allowedEndpointHosts = allowedEndpointHosts == null
+                ? DEFAULT_ALLOWED_ENDPOINT_HOSTS
+                : List.copyOf(allowedEndpointHosts);
     }
 
     public boolean vapidConfigured() {

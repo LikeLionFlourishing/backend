@@ -78,7 +78,7 @@ class PushSubscriptionControllerTest {
                         .content(VALID_BODY)
                         .with(authentication(authenticationToken())))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.subscriptionId").value(SUBSCRIPTION_ID.toString()))
+                .andExpect(jsonPath("$.id").value(SUBSCRIPTION_ID.toString()))
                 .andExpect(jsonPath("$.endpointFingerprint").value(FINGERPRINT))
                 .andExpect(jsonPath("$.active").value(true))
                 .andExpect(jsonPath("$.endpoint").doesNotExist())
@@ -95,7 +95,7 @@ class PushSubscriptionControllerTest {
                         .content(VALID_BODY)
                         .with(authentication(authenticationToken())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.subscriptionId").value(SUBSCRIPTION_ID.toString()));
+                .andExpect(jsonPath("$.id").value(SUBSCRIPTION_ID.toString()));
     }
 
     @Test
@@ -199,7 +199,7 @@ class PushSubscriptionControllerTest {
 
     private PushSubscriptionResponse response() {
         OffsetDateTime savedAt = OffsetDateTime.of(2026, 8, 15, 8, 30, 0, 0, ZoneOffset.UTC);
-        return PushSubscriptionResponse.of(SUBSCRIPTION_ID, FINGERPRINT, true, null, savedAt, savedAt);
+        return PushSubscriptionResponse.of(SUBSCRIPTION_ID, FINGERPRINT, true, savedAt, savedAt);
     }
 
     private UsernamePasswordAuthenticationToken authenticationToken() {

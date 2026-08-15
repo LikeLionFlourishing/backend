@@ -38,19 +38,18 @@ GET /v1/me/notification-settings
 ```json
 {
   "enabled": true,
-  "notificationTime": "17:30",
+  "time": "17:30",
   "timezone": "Asia/Seoul",
-  "permissionState": "GRANTED",
-  "activeSubscriptionCount": 1,
-  "updatedAt": "2026-08-15T08:30:00Z"
+  "permission": "GRANTED",
+  "activeSubscriptionCount": 1
 }
 ```
 
-- `notificationTime`과 `timezone`은 P0 고정값입니다. 서버가 항상 이 두 값을 보냅니다.
-- `permissionState`: `DEFAULT` | `GRANTED` | `DENIED` | `UNSUPPORTED`
+- `time`과 `timezone`은 P0 고정값입니다. 서버가 항상 이 두 값을 보냅니다.
+- `permission`: `DEFAULT` | `GRANTED` | `DENIED` | `UNSUPPORTED`
 - `activeSubscriptionCount`가 0이면 알림을 켜 두었어도 받을 기기가 없는 상태입니다.
   이 경우 재구독을 안내하는 화면이 필요합니다.
-- 온보딩을 건너뛴 사용자는 `enabled: false`, `permissionState: "DEFAULT"`, `updatedAt: null`이 옵니다.
+- 온보딩을 건너뛴 사용자는 `enabled: false`, `permission: "DEFAULT"`가 옵니다.
 - 응답에 `Cache-Control: no-store`가 붙습니다.
 
 ## 2. 알림 설정 변경
@@ -70,7 +69,7 @@ Content-Type: application/json
 - `enabled`는 필수입니다. 빠지면 422 `VALIDATION_ERROR`입니다.
 - `permissionState`는 선택입니다. 보내지 않으면 서버에 저장된 값을 그대로 둡니다.
   브라우저 권한 상태가 바뀐 시점에만 함께 보내면 됩니다.
-- 시각과 시간대는 바꿀 수 없습니다. `notificationTime` 같은 필드를 넣으면 400 `BAD_REQUEST`입니다.
+- 시각과 시간대는 바꿀 수 없습니다. `time` 같은 필드를 넣으면 400 `BAD_REQUEST`입니다.
   정의되지 않은 필드는 모두 거부합니다.
 - `enabled: true`와 `permissionState: "DENIED"` 조합도 그대로 저장됩니다. 알림을 켜겠다는 의사와
   브라우저 권한은 별개로 다룹니다.
@@ -101,10 +100,9 @@ Content-Type: application/json
 
 ```json
 {
-  "subscriptionId": "0198a31f-f33f-7000-8000-0000000000a1",
+  "id": "0198a31f-f33f-7000-8000-0000000000a1",
   "endpointFingerprint": "2b7f0a6c…(64자 hex)",
   "active": true,
-  "expiresAt": null,
   "createdAt": "2026-08-15T08:30:00Z",
   "updatedAt": "2026-08-15T08:30:00Z"
 }
@@ -113,8 +111,9 @@ Content-Type: application/json
 - 같은 기기에서 여러 번 보내도 행이 늘지 않습니다. 신규는 201, 갱신은 200이니 두 코드를 모두
   성공으로 처리하시면 됩니다.
 - 응답에 endpoint 원문과 키는 없습니다. 되짚을 수 없는 지문만 내려갑니다.
-  구독 해제에는 `subscriptionId`를 쓰십시오.
-- `expirationTime`은 브라우저가 준 값이 있을 때만 넣습니다. 대부분 `null`입니다.
+  구독 해제에는 `id`를 쓰십시오.
+- `expirationTime`은 숫자(epoch 밀리초) 또는 `null`입니다. 대부분 `null`입니다.
+- `userAgent`는 본문에 담지 않습니다. 서버가 `User-Agent` 헤더에서 읽어 저장합니다.
 - `User-Agent` 헤더는 서버가 기기 구분용으로 저장합니다. 별도로 넣을 것은 없습니다.
 
 ## 4. Push 구독 해제
@@ -133,11 +132,17 @@ X-CSRF-Token: <토큰>
 
 | 상태 | code | 언제 |
 |---|---|---|
-| 400 | `BAD_REQUEST` | 정의되지 않은 필드, 잘못된 enum 값, `subscriptionId`가 UUID 형식이 아닐 때 |
+| 400 | `BAD_REQUEST` | 정의되지 않은 필드, 잘못된 enum 값, 경로의 구독 번호가 UUID 형식이 아닐 때 |
 | 401 | `AUTHENTICATION_REQUIRED` | 세션 쿠키가 없거나 만료됐을 때 |
 | 403 | `CSRF_TOKEN_INVALID` | `X-CSRF-Token`이 없거나 틀릴 때 |
 | 404 | `RESOURCE_NOT_FOUND` | 구독이 없거나 다른 사용자 소유일 때 |
-| 422 | `VALIDATION_ERROR` | `enabled` 누락, `endpoint`가 https 절대 URL이 아닐 때, `p256dh`가 P-256 곡선 위의 점이 아닐 때, `auth`가 16바이트가 아닐 때 |
+| 422 | `VALIDATION_ERROR` | `enabled` 누락, `endpoint`가 허용된 push 서비스 주소가 아닐 때, `p256dh`가 P-256 곡선 위의 점이 아닐 때, `auth`가 16바이트가 아닐 때 |
+
+`endpoint`는 알려진 push 서비스 호스트만 허용합니다(`fcm.googleapis.com`,
+`push.services.mozilla.com`, `web.push.apple.com`, `notify.windows.com`). 사설·loopback·link-local
+주소는 거부합니다. 서버가 그 주소로 실제 요청을 보내기 때문에 대상을 좁혀 둔 것이고, 목록은
+`app.notifications.push.allowed-endpoint-hosts`로 조정합니다. 브라우저가 다른 호스트를 주는 환경이
+있으면 알려 주십시오.
 
 ## 구독 흐름 예시
 
@@ -207,6 +212,8 @@ Service Worker의 `push` 이벤트로 아래 JSON이 도착합니다.
 
 ## 참고
 
+- 요청 본문은 `PushSubscription.toJSON()` 결과 그대로입니다. `expirationTime`은 숫자(epoch 밀리초)
+  또는 `null`이고 `userAgent`는 본문에 담지 않습니다. 서버가 `User-Agent` 헤더에서 읽습니다.
 - 구독이 만료되어 Push 서비스가 `404` 또는 `410`을 돌려주면 서버가 그 구독을 비활성으로 내립니다.
   이후 `activeSubscriptionCount`가 줄어드니, 값이 0이면 재구독을 안내해 주십시오.
 - Swagger UI에서 실제 스키마를 확인할 수 있습니다: `http://localhost:8080/swagger-ui.html`

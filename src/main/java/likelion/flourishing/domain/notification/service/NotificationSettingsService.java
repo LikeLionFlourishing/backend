@@ -1,7 +1,5 @@
 package likelion.flourishing.domain.notification.service;
 
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.notification.dto.request.UpdateNotificationSettingsRequest;
@@ -53,8 +51,7 @@ public class NotificationSettingsService {
                         NotificationSchedule.NOTIFICATION_TIME_TEXT,
                         NotificationSchedule.ZONE_TEXT,
                         NotificationPermission.DEFAULT,
-                        activeSubscriptions,
-                        null
+                        activeSubscriptions
                 ));
     }
 
@@ -92,13 +89,8 @@ public class NotificationSettingsService {
                 NotificationSchedule.NOTIFICATION_TIME_TEXT,
                 NotificationSchedule.ZONE_TEXT,
                 setting.getPermissionState(),
-                activeSubscriptions,
-                updatedAt(setting)
+                activeSubscriptions
         );
-    }
-
-    private OffsetDateTime updatedAt(NotificationSetting setting) {
-        return setting.getUpdatedAt() == null ? null : setting.getUpdatedAt().atOffset(ZoneOffset.UTC);
     }
 
     private NotificationPermission permissionOrDefault(NotificationPermission permission) {
