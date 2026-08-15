@@ -85,7 +85,7 @@ class UserControllerTest {
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, Matchers.containsString("__Host-session=opaque")))
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, Matchers.containsString("HttpOnly")))
                 .andExpect(jsonPath("$.user.id").value(USER_ID.toString()))
-                .andExpect(jsonPath("$.user.signupcompleted").value(false))
+                .andExpect(jsonPath("$.user.signupCompleted").value(false))
                 .andExpect(jsonPath("$.csrfToken").value("csrf-token-value-that-is-long-enough"))
                 .andExpect(jsonPath("$.expiresAt").exists());
     }
@@ -152,7 +152,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(USER_ID.toString()))
                 .andExpect(jsonPath("$.email").value("soldier@example.com"))
-                .andExpect(jsonPath("$.signupcompleted").value(false));
+                .andExpect(jsonPath("$.signupCompleted").value(false));
     }
 
     @Test

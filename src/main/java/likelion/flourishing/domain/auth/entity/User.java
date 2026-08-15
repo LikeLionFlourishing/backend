@@ -53,7 +53,7 @@ public class User extends BaseTimeEntity {
         return email.trim().toLowerCase(Locale.ROOT);
     }
 
-    /** 명세의 User.signupcompleted 값. 온보딩까지 마쳐야 true가 된다. */
+    /** 명세의 User.signupCompleted 값. 온보딩까지 마쳐야 true가 된다. */
     public boolean isSignupCompleted() {
         return signupCompletedAt != null;
     }
