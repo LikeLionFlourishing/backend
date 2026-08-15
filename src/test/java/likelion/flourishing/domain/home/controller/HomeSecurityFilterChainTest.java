@@ -28,6 +28,7 @@ import likelion.flourishing.domain.home.entity.CheckInState;
 import likelion.flourishing.domain.home.entity.HomePriority;
 import likelion.flourishing.domain.home.service.HomeService;
 import likelion.flourishing.domain.home.service.SavedDailyCheckIn;
+import likelion.flourishing.global.config.AuthProperties;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -53,7 +54,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @ActiveProfiles("test")
 class HomeSecurityFilterChainTest {
 
-    private static final String COOKIE_NAME = "__Host-session";
     private static final String SESSION_TOKEN = "opaque-session-token";
     private static final String CSRF_TOKEN = "csrf-token-value-that-is-long-enough";
     private static final UUID USER_ID = UUID.fromString("2c56fe08-ea1f-45fc-915d-c35b7c0bca39");
@@ -63,6 +63,10 @@ class HomeSecurityFilterChainTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    /** 쿠키 이름을 상수로 들고 있으면 설정을 바꿨을 때 401 테스트가 엉뚱한 이유로 계속 통과한다. */
+    @Autowired
+    private AuthProperties authProperties;
 
     @MockitoBean
     private SessionService sessionService;
@@ -122,6 +126,19 @@ class HomeSecurityFilterChainTest {
         verify(homeService, never()).saveNoDiscomfort(any(), any(), any());
     }
 
+    /** 폐기·만료된 쿠키는 인증 없는 요청과 같게 401이다. */
+    @Test
+    void homeWithRevokedSessionCookieIsUnauthorized() throws Exception {
+        when(sessionService.authenticate(eq(SESSION_TOKEN), eq("GET"), isNull()))
+                .thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/v1/home").cookie(sessionCookie()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+
+        verify(homeService, never()).getHome(any());
+    }
+
     @Test
     void homeWithValidSessionCookieReachesController() throws Exception {
         when(sessionService.authenticate(eq(SESSION_TOKEN), eq("GET"), isNull()))
@@ -162,7 +179,7 @@ class HomeSecurityFilterChainTest {
     }
 
     private Cookie sessionCookie() {
-        return new Cookie(COOKIE_NAME, SESSION_TOKEN);
+        return new Cookie(authProperties.session().cookieName(), SESSION_TOKEN);
     }
 
     private AuthenticatedUser principal() {

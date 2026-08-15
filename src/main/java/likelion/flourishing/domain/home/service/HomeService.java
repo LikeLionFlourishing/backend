@@ -18,6 +18,9 @@ import likelion.flourishing.domain.home.repository.HomeReportQueryRepository.Pen
 import likelion.flourishing.domain.home.repository.HomeReportQueryRepository.RecentReportRow;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 /** 홈 화면 집계 조회와 "오늘 불편 없음" 저장. */
 @Service
 public class HomeService {
+
+    private static final Logger log = LoggerFactory.getLogger(HomeService.class);
 
     /**
      * 하루 경계는 Asia/Seoul로 판단한다. 저장하는 시각은 UTC지만 "오늘"은 사용자가 사는
@@ -115,9 +120,15 @@ public class HomeService {
         UUID userId = principal.userId();
         try {
             return dailyCheckInWriter.saveNoDiscomfort(userId, date);
-        } catch (DataIntegrityViolationException raced) {
+        } catch (DataIntegrityViolationException | ConcurrencyFailureException raced) {
+            // 유니크 위반만 잡지 않는 이유는, 지는 쪽 INSERT가 이긴 쪽이 커밋할 때까지 대기하다가
+            // 잠금 대기 시간을 넘기거나 서로 물릴 수 있기 때문이다. 둘 다 ConcurrencyFailureException
+            // 계열이라 따로 받지 않으면 그대로 500이 된다.
+            //
             // 재시도는 한 번뿐이다. 두 번째도 제약에 걸리면 원인이 경합이 아니라는 뜻이다.
             // 그 사이 같은 날 피부 보고가 확정됐다면 다시 읽은 값이 SKIN_REPORT라 409가 나간다.
+            // 삼킨 예외를 남기지 않으면 경합 흡수와 실제 무결성 오류를 나중에 구분할 수 없다.
+            log.warn("피부 점호 저장이 경합으로 실패해 한 번 더 시도합니다. type={}", raced.getClass().getSimpleName());
             return dailyCheckInWriter.saveNoDiscomfort(userId, date);
         }
     }
