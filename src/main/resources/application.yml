@@ -61,6 +61,11 @@ app:
         limit: 10
         window: 10m
 
+  records:
+    crypto:
+      # 32바이트 마스터 키를 Base64로 인코딩한 값. 원문 암호화 키와 커서 서명 키를 분리 파생한다.
+      master-key: ${RECORD_DATA_ENCRYPTION_KEY:}
+
 springdoc:
   api-docs:
     path: /v3/api-docs

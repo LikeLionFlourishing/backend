@@ -144,6 +144,17 @@ class SecurityFilterChainTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void skinRecordQueriesRequireAuthentication() throws Exception {
+        mockMvc.perform(get("/v1/skin-reports"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+
+        mockMvc.perform(get("/v1/skin-reports/0198a31f-f33f-7000-8000-000000000001"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+    }
+
     private Cookie sessionCookie() {
         return new Cookie(COOKIE_NAME, SESSION_TOKEN);
     }

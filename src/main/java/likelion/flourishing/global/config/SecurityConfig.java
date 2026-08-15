@@ -75,6 +75,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/v1/me/onboarding").authenticated()
                         .requestMatchers(HttpMethod.GET, "/v1/home").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/v1/daily-check-ins/*").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/v1/skin-reports").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/v1/skin-reports/*").authenticated()
                         .requestMatchers(HttpMethod.GET, "/v1/skin-reports/*/follow-up").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/v1/skin-reports/*/follow-up").authenticated()
                         .anyRequest().denyAll()

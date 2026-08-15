@@ -11,6 +11,7 @@ src/main/generated/
 .project
 .settings/
 .vscode/
+.kiro/
 
 .DS_Store
 
