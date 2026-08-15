@@ -272,6 +272,21 @@ class FollowUpServiceTest {
                 .isEqualTo(ErrorCode.FOLLOW_UP_ALREADY_SUBMITTED);
     }
 
+    /**
+     * 모르는 result_type을 조용히 CLINICIAN_CHECK로 몰지 않는다. 그러면 종류가 맞지 않는 경과가
+     * FOLLOW_UP_KIND_MISMATCH 검사를 그대로 통과한다.
+     */
+    @Test
+    void saveFailsLoudlyForUnknownResultType() {
+        when(followUpReportRepository.findOwnedReport(any(), any()))
+                .thenReturn(Optional.of(report("SELF_CARE_GUIDE_V2", AVAILABLE_AT, EXPIRES_AT)));
+
+        assertThatThrownBy(() -> followUpService.saveFollowUp(principal(), REPORT_ID, selfCareRequest()))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(followUpRepository, never()).saveAndFlush(any());
+    }
+
     private AuthenticatedUser principal() {
         return new AuthenticatedUser(
                 USER_ID,
