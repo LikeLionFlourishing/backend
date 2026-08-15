@@ -15,16 +15,20 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.onboarding")
 public record OnboardingProperties(String consentVersion) {
 
-    /** 설정이 비어 있으면 명세 예시와 같은 값을 쓴다. */
-    private static final String DEFAULT_CONSENT_VERSION = "2026-08-09";
-
+    /**
+     * 값이 비어 있으면 기동을 막는다. 소스에 박아 둔 옛 버전으로 조용히 되돌아가면, 운영자가
+     * 환경변수를 비운 사고가 "아무 일도 없는 것"처럼 보이면서 실제로는 지난 문구에 대한 동의가
+     * 계속 쌓인다. 기본값은 application.yml 한 곳에만 둔다.
+     */
     public OnboardingProperties {
-        consentVersion = consentVersion == null || consentVersion.isBlank()
-                ? DEFAULT_CONSENT_VERSION
-                : consentVersion.trim();
+        if (consentVersion == null || consentVersion.isBlank()) {
+            throw new IllegalStateException("ONBOARDING_CONSENT_VERSION must be configured");
+        }
+        consentVersion = consentVersion.trim();
     }
 
+    /** 요청 값도 서버 값과 같은 방식으로 정규화해서 비교한다. 앞뒤 공백 때문에 거절하지 않는다. */
     public boolean isActive(String requested) {
-        return consentVersion.equals(requested);
+        return requested != null && consentVersion.equals(requested.trim());
     }
 }
