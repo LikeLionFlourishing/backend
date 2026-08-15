@@ -1,0 +1,12 @@
+.git/
+.gradle/
+.gradle-user-home/
+build/
+bin/
+out/
+src/main/generated/
+.env
+.env.*
+logs/
+docs/
+db/
