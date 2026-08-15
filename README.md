@@ -35,20 +35,30 @@ Web Push 알림을 실제로 발송하려면 VAPID 키도 필요합니다. 키�
 정상 기동하고 17:30 발송 작업만 건너뜁니다.
 
 ```bash
-# P-256 키 쌍 생성
+# 1. P-256 키 쌍 생성
+umask 077
 openssl ecparam -name prime256v1 -genkey -noout -out vapid.pem
 
-# VAPID_PUBLIC_KEY (비압축 65바이트 base64url)
+# 2. VAPID_PUBLIC_KEY (비압축 65바이트를 패딩 없는 base64url로)
 openssl ec -in vapid.pem -pubout -outform DER \
-  | tail -c 65 | basenc --base64url | tr -d '=\n'
+  | tail -c 65 | openssl base64 -A | tr '+/' '-_' | tr -d '='
 
-# VAPID_PRIVATE_KEY (32바이트 스칼라 base64url)
+# 3. VAPID_PRIVATE_KEY (32바이트 스칼라를 패딩 없는 base64url로)
 openssl ec -in vapid.pem -outform DER \
-  | tail -c +8 | head -c 32 | basenc --base64url | tr -d '=\n'
+  | tail -c +8 | head -c 32 | openssl base64 -A | tr '+/' '-_' | tr -d '='
 ```
 
+공개키는 87자, 비밀키는 43자가 나옵니다. 공개키를 디코딩하면 `0x04`로 시작하는 65바이트입니다.
+
 `VAPID_SUBJECT`에는 push 서비스가 연락할 수 있는 `mailto:` 또는 `https:` URI를 넣습니다.
-`vapid.pem`은 커밋하지 않고 삭제하거나 비밀 저장소로 옮깁니다.
+
+주의할 점이 있습니다.
+
+- `vapid.pem`은 커밋하지 않고 비밀 저장소로 옮긴 뒤 삭제합니다.
+- 공개키는 프론트엔드의 `applicationServerKey`와 같은 값이어야 합니다. 다르면 구독은
+  만들어지지만 알림이 전달되지 않습니다.
+- 키를 바꾸면 기존 구독이 모두 무효가 되어 사용자가 다시 구독해야 합니다. 환경별로
+  다른 키를 쓰면 환경을 옮길 때 구독도 함께 무효가 됩니다.
 
 ### 2. MySQL과 Redis 실행
 
