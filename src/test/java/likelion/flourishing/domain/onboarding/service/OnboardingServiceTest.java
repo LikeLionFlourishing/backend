@@ -186,6 +186,25 @@ class OnboardingServiceTest {
     }
 
     /**
+     * 신규 알림 설정 행이 실제로 저장되는지 확인한다. 기존 행을 덮어쓰는 경로만 검증하면
+     * 저장 호출이 통째로 빠져도 스위트가 통과한다.
+     */
+    @Test
+    void completeSavesNewNotificationSettingRow() {
+        when(userConsentRepository.findByUserIdAndConsentTypeAndConsentVersion(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
+
+        onboardingService.complete(principal(), request(true, NotificationPermission.GRANTED));
+
+        ArgumentCaptor<NotificationSetting> captor = ArgumentCaptor.forClass(NotificationSetting.class);
+        verify(notificationSettingRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getUserId()).isEqualTo(USER_ID);
+        assertThat(captor.getValue().isEnabled()).isTrue();
+        assertThat(captor.getValue().getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
+    }
+
+    /**
      * 동의 증빙은 서버가 아는 문구여야 의미가 있다. 서버가 들고 있는 활성 버전이 아니면
      * 이력을 남기지 않고 가입 완료도 하지 않는다.
      */
