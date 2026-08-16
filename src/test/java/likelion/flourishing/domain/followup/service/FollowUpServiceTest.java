@@ -102,7 +102,8 @@ class FollowUpServiceTest {
 
         assertThat(saved.created()).isTrue();
         assertThat(saved.response().getClinicianCheckStatus()).isEqualTo(ClinicianCheckStatus.CHECKED);
-        assertThat(saved.response().getActionCompletion()).isNull();
+        // 명세 v2_1에서 의료진 확인 경과도 행동 실행 여부를 저장한다.
+        assertThat(saved.response().getActionCompletion()).isEqualTo(ActionCompletion.PARTLY_DONE);
     }
 
     @Test
@@ -124,6 +125,30 @@ class FollowUpServiceTest {
 
         SaveFollowUpRequest changed = new SelfCareFollowUpRequest(
                 FollowUpKind.SELF_CARE, SkinChange.WORSENED, ActionCompletion.NOT_DONE
+        );
+
+        assertThatThrownBy(() -> followUpService.saveFollowUp(principal(), REPORT_ID, changed))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.FOLLOW_UP_ALREADY_SUBMITTED);
+    }
+
+    /**
+     * 의료진 확인 여부는 그대로인데 행동 실행 여부만 다른 재요청도 덮어쓰기다.
+     * 명세 v2_1에서 이 값이 CLINICIAN_CHECK의 필수 필드가 됐으므로 같은 내용 판정에 들어가야 한다.
+     */
+    @Test
+    void saveRejectsClinicianOverwriteThatOnlyChangesActionCompletion() {
+        when(followUpReportRepository.findOwnedReport(any(), any()))
+                .thenReturn(Optional.of(report("CLINICIAN_CHECK", AVAILABLE_AT, EXPIRES_AT)));
+        when(followUpRepository.findByReportIdAndUserId(REPORT_ID, USER_ID))
+                .thenReturn(Optional.of(FollowUp.of(REPORT_ID, USER_ID, clinicianRequest(), AVAILABLE_AT)));
+
+        SaveFollowUpRequest changed = new ClinicianFollowUpRequest(
+                FollowUpKind.CLINICIAN_CHECK,
+                SkinChange.SIMILAR,
+                ActionCompletion.NOT_DONE,
+                ClinicianCheckStatus.CHECKED
         );
 
         assertThatThrownBy(() -> followUpService.saveFollowUp(principal(), REPORT_ID, changed))
@@ -308,7 +333,10 @@ class FollowUpServiceTest {
 
     private SaveFollowUpRequest clinicianRequest() {
         return new ClinicianFollowUpRequest(
-                FollowUpKind.CLINICIAN_CHECK, SkinChange.SIMILAR, ClinicianCheckStatus.CHECKED
+                FollowUpKind.CLINICIAN_CHECK,
+                SkinChange.SIMILAR,
+                ActionCompletion.PARTLY_DONE,
+                ClinicianCheckStatus.CHECKED
         );
     }
 }
