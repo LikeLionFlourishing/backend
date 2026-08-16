@@ -39,6 +39,12 @@ public class OnboardingService {
         if (!onboardingProperties.isActive(request.consentVersion())) {
             throw new BusinessException(ErrorCode.CONSENT_VERSION_NOT_ACCEPTED);
         }
+        // 알림 수신 동의도 같은 이유로 서버가 아는 버전일 때만 받는다. 알림을 켜지 않는 요청은
+        // 동의를 남기지 않으므로 검사 대상이 아니다. 버전이 비어 있는 경우는 요청 검증이 먼저 막는다.
+        if (Boolean.TRUE.equals(request.notificationEnabled())
+                && !onboardingProperties.isActiveNotificationConsent(request.notificationConsentVersion())) {
+            throw new BusinessException(ErrorCode.CONSENT_VERSION_NOT_ACCEPTED);
+        }
 
         try {
             return onboardingWriter.complete(principal, request);

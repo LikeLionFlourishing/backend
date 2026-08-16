@@ -20,6 +20,7 @@ import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.auth.security.SessionAuthenticationFilter;
 import likelion.flourishing.domain.auth.service.SessionService;
+import likelion.flourishing.domain.onboarding.dto.response.NotificationConsentResponse;
 import likelion.flourishing.domain.onboarding.dto.response.OnboardingResponse;
 import likelion.flourishing.domain.onboarding.entity.NotificationPermission;
 import likelion.flourishing.domain.onboarding.service.OnboardingService;
@@ -55,8 +56,10 @@ class OnboardingSecurityFilterChainTest {
     private static final UUID USER_ID = UUID.fromString("2c56fe08-ea1f-45fc-915d-c35b7c0bca39");
     private static final UUID SESSION_ID = UUID.fromString("5ecb88d8-6a21-4a54-8967-72599f078963");
     private static final String BODY = """
-            {"consentVersion":"2026-08-09","sensitiveDataConsent":true,
-             "notificationEnabled":true,"notificationPermission":"GRANTED"}
+            {"consentVersion":"2026-08-16","sensitiveDataConsent":true,
+             "notificationEnabled":true,"notificationPermission":"GRANTED",
+             "notificationTime":"21:00","notificationConsent":true,
+             "notificationConsentVersion":"2026-08-16"}
             """;
 
     @Autowired
@@ -123,7 +126,7 @@ class OnboardingSecurityFilterChainTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(BODY))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.consentVersion").value("2026-08-09"));
+                .andExpect(jsonPath("$.consentVersion").value("2026-08-16"));
 
         verify(onboardingService).complete(any(), any());
     }
@@ -143,6 +146,14 @@ class OnboardingSecurityFilterChainTest {
 
     private OnboardingResponse response() {
         OffsetDateTime at = OffsetDateTime.of(2026, 8, 11, 7, 0, 0, 0, ZoneOffset.UTC);
-        return OnboardingResponse.of("2026-08-09", at, true, NotificationPermission.GRANTED, at);
+        return OnboardingResponse.of(
+                "2026-08-16",
+                at,
+                true,
+                NotificationPermission.GRANTED,
+                "21:00",
+                NotificationConsentResponse.of(true, "2026-08-16", LocalDateTime.of(2026, 8, 11, 7, 0)),
+                at
+        );
     }
 }
