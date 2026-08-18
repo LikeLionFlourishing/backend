@@ -155,6 +155,32 @@ class SkinReportSubmissionServiceTest {
         assertThat(new String(capturedReport().getRawTextEncrypted())).doesNotContain("턱");
     }
 
+    /**
+     * 하루 오차도 허용하지 않는다. 허용하면 어제 자리에 오늘 보고가 들어가 하루 한 건 제약과
+     * 경과 입력 가능 시각이 함께 어긋난다.
+     */
+    @Test
+    void reportDateOtherThanTodayIsRejected() {
+        CreateSkinReportRequest yesterday = requestOn(TODAY_IN_SEOUL.minusDays(1));
+
+        assertThatThrownBy(() -> service.submit(principal(), IDEMPOTENCY_KEY, yesterday))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.REPORT_DATE_NOT_TODAY);
+        verifyNothingWritten();
+    }
+
+    /** 어느 필드가 문제였는지 프런트가 그대로 짚어 줄 수 있어야 한다. */
+    @Test
+    void rejectedReportDateNamesTheField() {
+        CreateSkinReportRequest tomorrow = requestOn(TODAY_IN_SEOUL.plusDays(1));
+
+        assertThatThrownBy(() -> service.submit(principal(), IDEMPOTENCY_KEY, tomorrow))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrors().get(0).getField())
+                .isEqualTo("reportDate");
+    }
+
     @Test
     void secondReportOnTheSameDayIsRejected() {
         when(skinReportRepository.existsByUserIdAndReportDate(USER_ID, TODAY_IN_SEOUL)).thenReturn(true);
@@ -242,6 +268,7 @@ class SkinReportSubmissionServiceTest {
     @Test
     void invalidSelectionCombinationIsRejectedBeforeAnyLookup() {
         CreateSkinReportRequest invalid = new CreateSkinReportRequest(
+                TODAY_IN_SEOUL,
                 "오른쪽 턱이 빨개요.",
                 new ConfirmedSelectionsRequest(
                         BodyArea.RIGHT_CHIN,
@@ -339,8 +366,16 @@ class SkinReportSubmissionServiceTest {
                 List.of());
     }
 
+    private CreateSkinReportRequest requestOn(LocalDate reportDate) {
+        CreateSkinReportRequest today = request(List.of(PreCareCheck.NONE));
+        return new CreateSkinReportRequest(
+                reportDate, today.rawText(), today.confirmed(), today.preCareChecks()
+        );
+    }
+
     private CreateSkinReportRequest request(List<PreCareCheck> preCareChecks) {
         return new CreateSkinReportRequest(
+                TODAY_IN_SEOUL,
                 "오른쪽 턱이 빨갛고 따가워요.",
                 new ConfirmedSelectionsRequest(
                         BodyArea.RIGHT_CHIN,

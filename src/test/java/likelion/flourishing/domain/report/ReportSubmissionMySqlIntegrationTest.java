@@ -225,6 +225,7 @@ class ReportSubmissionMySqlIntegrationTest {
         submissionService.submit(principal(), key, selfCareRequest());
 
         CreateSkinReportRequest changed = new CreateSkinReportRequest(
+                todayInSeoul(),
                 "왼쪽 볼이 따가워요.",
                 new ConfirmedSelectionsRequest(
                         BodyArea.LEFT_CHEEK,
@@ -500,6 +501,7 @@ class ReportSubmissionMySqlIntegrationTest {
 
     private CreateSkinReportRequest selfCareRequest() {
         return new CreateSkinReportRequest(
+                todayInSeoul(),
                 "오른쪽 턱이 빨갛고 따가워요.",
                 new ConfirmedSelectionsRequest(
                         BodyArea.RIGHT_CHIN,
@@ -515,6 +517,7 @@ class ReportSubmissionMySqlIntegrationTest {
 
     private CreateSkinReportRequest clinicianCheckRequest() {
         return new CreateSkinReportRequest(
+                todayInSeoul(),
                 "턱에 고름이 잡히고 아파요.",
                 new ConfirmedSelectionsRequest(
                         BodyArea.RIGHT_CHIN,
