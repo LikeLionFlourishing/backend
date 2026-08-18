@@ -24,6 +24,11 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+  # API 명세의 모든 요청 스키마가 additionalProperties: false이므로 정의되지 않은 필드를 거부한다.
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+
 server:
   port: ${SERVER_PORT:8080}
   error:
@@ -34,6 +39,80 @@ server:
 app:
   cors:
     allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:5173}
+
+  problem:
+    base-uri: ${PROBLEM_BASE_URI:https://api.example.invalid/problems}
+
+  auth:
+    session:
+      # __Host- 접두사는 Secure와 Path=/를 요구한다. HTTP로 띄우는 로컬은 local 프로파일이 낮춘다.
+      cookie-name: ${SESSION_COOKIE_NAME:__Host-session}
+      secure: ${SESSION_COOKIE_SECURE:true}
+      # 프런트엔드가 다른 등록 도메인에 있으면 Lax 쿠키는 fetch에 실리지 않는다.
+      # 그 배포에서는 None으로 올린다(브라우저가 Secure를 함께 요구한다).
+      same-site: ${SESSION_COOKIE_SAME_SITE:Lax}
+      ttl: 14d
+    rate-limit:
+      register:
+        limit: 10
+        window: 1h
+      login-per-ip:
+        limit: 20
+        window: 10m
+      login-per-email:
+        limit: 10
+        window: 10m
+
+  records:
+    crypto:
+      # 32바이트 마스터 키를 Base64로 인코딩한 값.
+      # 원문 암호화 키, 커서 서명 키, 멱등 응답 암호화 키를 목적별로 분리 파생한다.
+      master-key: ${RECORD_DATA_ENCRYPTION_KEY:}
+
+  ai:
+    openai:
+      # 키나 모델이 비어 있으면 애플리케이션은 뜨고 AI 호출만 실패로 처리한다.
+      # 구조화는 실패해도 사용자가 직접 고르면 진행되고, 관리 설명은 승인된 대체 문구로 저장된다.
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:}
+      # 사용자를 기다리게 하는 화면 앞단 호출이라 오래 붙잡지 않고 실패로 돌린다.
+      connect-timeout: 3s
+      read-timeout: 8s
+      max-output-tokens: 800
+      # 구조화는 사용자가 한 화면에서 여러 번 부를 수 있고 호출마다 외부 비용이 든다.
+      # 보고 생성과 설명 재생성은 하루 한 건·결과당 한 번으로 자연히 묶이므로 이 경로만 제한한다.
+      rate-limit:
+        limit: 30
+        window: 1h
+
+  notifications:
+    crypto:
+      # 32바이트 마스터 키를 Base64로 인코딩한 값. 구독 암호화 키와 endpoint 지문 키를 분리 파생한다.
+      master-key: ${PUSH_DATA_ENCRYPTION_KEY:}
+    push:
+      vapid:
+        # 비압축 65바이트 공개키와 32바이트 비밀키를 각각 패딩 없는 base64url로 인코딩한 값.
+        # 비어 있으면 애플리케이션은 뜨고 17:30 발송 작업만 건너뛴다.
+        public-key: ${VAPID_PUBLIC_KEY:}
+        private-key: ${VAPID_PRIVATE_KEY:}
+        subject: ${VAPID_SUBJECT:}
+      ttl: 1h
+      connect-timeout: 3s
+      read-timeout: 5s
+      # 등록을 허용하는 push 서비스 호스트. endpoint는 사용자 입력이고 그 주소로 서버가 요청을
+      # 보내므로 SSRF를 막기 위해 대상을 좁힌다. 목록을 비우면 사설·loopback 대역만 막는다.
+      allowed-endpoint-hosts:
+        - fcm.googleapis.com
+        - push.services.mozilla.com
+        - web.push.apple.com
+        - notify.windows.com
+  onboarding:
+    # 지금 받고 있는 동의서 버전. 요청이 이 값과 다르면 동의를 저장하지 않는다.
+    # 문구가 바뀌면 이 값을 올려 예전 버전으로 오는 요청이 새 동의를 다시 받게 한다.
+    # 두 문구는 따로 개정될 수 있어 버전도 따로 둔다.
+    consent-version: ${ONBOARDING_CONSENT_VERSION:2026-08-16}
+    notification-consent-version: ${ONBOARDING_NOTIFICATION_CONSENT_VERSION:2026-08-16}
 
 springdoc:
   api-docs:
