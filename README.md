@@ -1,6 +1,6 @@
 # flourishing-backend
 
-관리하는 행보관 서비스의 Spring Boot 백엔드 저장소입니다.
+제대로 서비스의 Spring Boot 백엔드 저장소입니다.
 
 ## 요구사항
 
