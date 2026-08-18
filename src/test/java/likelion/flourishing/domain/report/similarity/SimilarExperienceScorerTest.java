@@ -36,8 +36,7 @@ class SimilarExperienceScorerTest {
                 BodyArea.RIGHT_CHIN, Set.of(Appearance.APP_REDNESS), Set.of(Sensation.EXCESS_SEBUM), Set.of(Situation.SHAVING)
         );
 
-        // 부위 3 + 겉모습 2 + 불편 1 + 직전 상황 1 + 결과 유형 1 = 8
-        // 명세 v2_1 전에는 불편이 NONE이라 점수에서 빠져 7이었다. 이제 NONE이 없어 함께 센다.
+        // 부위 3 + 겉모습 1 + 불편 1 + 직전 상황 2 + 관리 상태 1 = 8
         assertThat(scorer.score(query, candidate)).isEqualTo(8);
     }
 
@@ -56,8 +55,9 @@ class SimilarExperienceScorerTest {
                 BodyArea.NOSE, manyAppearances, Set.of(Sensation.EXCESS_SEBUM), Set.of(Situation.NONE_RECALLED)
         );
 
-        // 부위 3 + 겉모습 상한 4 + 불편 1 + 결과 유형 1 = 9. 겉모습 네 개가 8점이 되지 않는다.
-        assertThat(scorer.score(query, candidate)).isEqualTo(9);
+        // 부위 3 + 겉모습 상한 3 + 불편 1 + 관리 상태 1 = 8. 겉모습 네 개가 4점이 되지 않는다.
+        // 직전 상황은 NONE_RECALLED라 빠진다.
+        assertThat(scorer.score(query, candidate)).isEqualTo(8);
     }
 
     /**
@@ -82,8 +82,8 @@ class SimilarExperienceScorerTest {
                 Set.of(Situation.NONE_RECALLED)
         );
 
-        // 부위가 다르고 상황은 NONE_RECALLED라 빠진다. 겉모습 2 + 불편 1 + 결과 유형 1 = 4
-        assertThat(scorer.score(query, candidate)).isEqualTo(4);
+        // 부위가 다르고 상황은 NONE_RECALLED라 빠진다. 겉모습 1 + 불편 1 + 관리 상태 1 = 3
+        assertThat(scorer.score(query, candidate)).isEqualTo(3);
     }
 
     @Test
@@ -125,6 +125,83 @@ class SimilarExperienceScorerTest {
                 .containsExactly(best.getId(), recentTie.getId(), olderTie.getId());
     }
 
+    /**
+     * 명세 SimilarExperience.similarityScore가 정한 배점을 항목별로 고정한다.
+     *
+     * <p>겉모습과 직전 상황의 가중치가 서로 뒤바뀐 채로 있었고 마지막 항이 다른 필드였다.
+     * 상수만 보고는 알아차리기 어려워 각 항목을 하나씩 떼어 확인한다.
+     */
+    @Test
+    void eachWeightMatchesTheSpec() {
+        Set<Appearance> none = Set.of();
+        Set<Sensation> noSensation = Set.of();
+        Set<Situation> noSituation = Set.of();
+
+        // 같은 대표 부위 +3 (관리 상태는 다르게 둬서 섞이지 않게 한다)
+        assertThat(scorer.score(
+                new SimilarExperienceQuery(BodyArea.NOSE, none, noSensation, noSituation,
+                        CareAvailability.ALREADY_WASHED),
+                report(BodyArea.NOSE, none, noSensation, noSituation, CareAvailability.CAN_CARE_BEFORE_SLEEP)
+        )).isEqualTo(3);
+
+        // 같은 겉모습 항목당 +1
+        assertThat(scorer.score(
+                new SimilarExperienceQuery(BodyArea.NOSE, Set.of(Appearance.APP_REDNESS), noSensation, noSituation,
+                        CareAvailability.ALREADY_WASHED),
+                report(BodyArea.NECK, Set.of(Appearance.APP_REDNESS), noSensation, noSituation,
+                        CareAvailability.CAN_CARE_BEFORE_SLEEP)
+        )).isEqualTo(1);
+
+        // 같은 느껴지는 불편 항목당 +1
+        assertThat(scorer.score(
+                new SimilarExperienceQuery(BodyArea.NOSE, none, Set.of(Sensation.BREAKOUT), noSituation,
+                        CareAvailability.ALREADY_WASHED),
+                report(BodyArea.NECK, none, Set.of(Sensation.BREAKOUT), noSituation,
+                        CareAvailability.CAN_CARE_BEFORE_SLEEP)
+        )).isEqualTo(1);
+
+        // 같은 직전 상황 항목당 +2 — 가장 큰 가중치
+        assertThat(scorer.score(
+                new SimilarExperienceQuery(BodyArea.NOSE, none, noSensation, Set.of(Situation.SHAVING),
+                        CareAvailability.ALREADY_WASHED),
+                report(BodyArea.NECK, none, noSensation, Set.of(Situation.SHAVING),
+                        CareAvailability.CAN_CARE_BEFORE_SLEEP)
+        )).isEqualTo(2);
+
+        // 같은 현재 관리 상태 +1
+        assertThat(scorer.score(
+                new SimilarExperienceQuery(BodyArea.NOSE, none, noSensation, noSituation,
+                        CareAvailability.ALREADY_WASHED),
+                report(BodyArea.NECK, none, noSensation, noSituation, CareAvailability.ALREADY_WASHED)
+        )).isEqualTo(1);
+    }
+
+    /** 직전 상황 상한이 겉모습 상한보다 커야 명세가 말한 "가장 큰 가중치"가 유지된다. */
+    @Test
+    void situationCapStaysAboveAppearanceCap() {
+        Set<Situation> threeSituations = Set.of(
+                Situation.SHAVING, Situation.NEW_PRODUCT, Situation.SWEAT_OR_SEBUM
+        );
+        Set<Appearance> fourAppearances = Set.of(
+                Appearance.APP_REDNESS, Appearance.APP_BUMP, Appearance.APP_DRYNESS, Appearance.APP_OILINESS
+        );
+
+        int situationOnly = scorer.score(
+                new SimilarExperienceQuery(BodyArea.NOSE, Set.of(), Set.of(), threeSituations,
+                        CareAvailability.ALREADY_WASHED),
+                report(BodyArea.NECK, Set.of(), Set.of(), threeSituations, CareAvailability.CAN_CARE_BEFORE_SLEEP)
+        );
+        int appearanceOnly = scorer.score(
+                new SimilarExperienceQuery(BodyArea.NOSE, fourAppearances, Set.of(), Set.of(),
+                        CareAvailability.ALREADY_WASHED),
+                report(BodyArea.NECK, fourAppearances, Set.of(), Set.of(), CareAvailability.CAN_CARE_BEFORE_SLEEP)
+        );
+
+        assertThat(situationOnly).isEqualTo(6);
+        assertThat(appearanceOnly).isEqualTo(3);
+        assertThat(situationOnly).isGreaterThan(appearanceOnly);
+    }
+
     private SimilarExperienceQuery query(
             BodyArea primaryArea,
             Set<Appearance> appearances,
@@ -132,7 +209,7 @@ class SimilarExperienceScorerTest {
             Set<Situation> situations
     ) {
         return new SimilarExperienceQuery(
-                primaryArea, appearances, sensations, situations, ResultType.SELF_CARE_GUIDE
+                primaryArea, appearances, sensations, situations, CareAvailability.ALREADY_WASHED
         );
     }
 
@@ -142,13 +219,23 @@ class SimilarExperienceScorerTest {
             Set<Sensation> sensations,
             Set<Situation> situations
     ) {
+        return report(primaryArea, appearances, sensations, situations, CareAvailability.ALREADY_WASHED);
+    }
+
+    private SkinReport report(
+            BodyArea primaryArea,
+            Set<Appearance> appearances,
+            Set<Sensation> sensations,
+            Set<Situation> situations,
+            CareAvailability careAvailability
+    ) {
         return SkinReport.create(
                 UUID.randomUUID(),
                 LocalDate.of(2026, 8, 1),
                 new byte[]{1},
                 primaryArea,
                 null,
-                CareAvailability.ALREADY_WASHED,
+                careAvailability,
                 ResultType.SELF_CARE_GUIDE,
                 LocalDateTime.of(2026, 8, 2, 0, 0),
                 LocalDateTime.of(2026, 8, 4, 0, 0),
