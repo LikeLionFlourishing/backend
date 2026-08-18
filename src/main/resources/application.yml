@@ -24,6 +24,11 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+  # API 명세의 모든 요청 스키마가 additionalProperties: false이므로 정의되지 않은 필드를 거부한다.
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+
 server:
   port: ${SERVER_PORT:8080}
   error:
@@ -34,6 +39,36 @@ server:
 app:
   cors:
     allowed-origins: ${FRONTEND_ALLOWED_ORIGINS:http://localhost:5173}
+
+  problem:
+    base-uri: ${PROBLEM_BASE_URI:https://api.example.invalid/problems}
+
+  auth:
+    session:
+      # __Host- 접두사는 Secure와 Path=/를 요구한다. HTTP로 띄우는 로컬은 local 프로파일이 낮춘다.
+      cookie-name: ${SESSION_COOKIE_NAME:__Host-session}
+      secure: ${SESSION_COOKIE_SECURE:true}
+      # 프런트엔드가 다른 등록 도메인에 있으면 Lax 쿠키는 fetch에 실리지 않는다.
+      # 그 배포에서는 None으로 올린다(브라우저가 Secure를 함께 요구한다).
+      same-site: ${SESSION_COOKIE_SAME_SITE:Lax}
+      ttl: 14d
+    rate-limit:
+      register:
+        limit: 10
+        window: 1h
+      login-per-ip:
+        limit: 20
+        window: 10m
+      login-per-email:
+        limit: 10
+        window: 10m
+
+  onboarding:
+    # 지금 받고 있는 동의서 버전. 요청이 이 값과 다르면 동의를 저장하지 않는다.
+    # 문구가 바뀌면 이 값을 올려 예전 버전으로 오는 요청이 새 동의를 다시 받게 한다.
+    # 두 문구는 따로 개정될 수 있어 버전도 따로 둔다.
+    consent-version: ${ONBOARDING_CONSENT_VERSION:2026-08-16}
+    notification-consent-version: ${ONBOARDING_NOTIFICATION_CONSENT_VERSION:2026-08-16}
 
 springdoc:
   api-docs:

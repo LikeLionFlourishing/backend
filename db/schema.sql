@@ -86,13 +86,15 @@ CREATE TABLE user_consents (
         FOREIGN KEY (user_id) REFERENCES users (id)
         ON UPDATE RESTRICT ON DELETE CASCADE,
     CONSTRAINT ck_user_consents_type
-        CHECK (consent_type IN ('SERVICE_SCOPE', 'SENSITIVE_DATA')),
+        CHECK (consent_type IN ('SERVICE_SCOPE', 'SENSITIVE_DATA', 'NOTIFICATION')),
+    -- 동의하지 않은 사실은 행을 남기지 않는 것으로 표현한다. 거절을 저장하지 않으므로
+    -- NOTIFICATION 동의도 이 CHECK를 그대로 지킨다.
     CONSTRAINT ck_user_consents_required_accepted
         CHECK (accepted = TRUE)
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_0900_ai_ci
-  COMMENT = '버전별 필수 동의 이력';
+  COMMENT = '버전별 동의 이력';
 
 CREATE INDEX ix_user_consents_user_consented
     ON user_consents (user_id, consented_at DESC);
@@ -100,7 +102,9 @@ CREATE INDEX ix_user_consents_user_consented
 CREATE TABLE notification_settings (
     user_id BINARY(16) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    notification_time CHAR(5) NOT NULL DEFAULT '17:30',
+    -- CHAR(5)에서 옮겼다. 이 스키마의 다른 문자열 컬럼과 표기를 맞추고,
+    -- CHAR의 공백 패딩이 문자열 비교에 끼어들지 않게 한다.
+    notification_time VARCHAR(5) NOT NULL DEFAULT '17:30',
     timezone VARCHAR(40) NOT NULL DEFAULT 'Asia/Seoul',
     permission_state VARCHAR(20) NOT NULL DEFAULT 'DEFAULT',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -111,8 +115,10 @@ CREATE TABLE notification_settings (
     CONSTRAINT fk_notification_settings_user
         FOREIGN KEY (user_id) REFERENCES users (id)
         ON UPDATE RESTRICT ON DELETE CASCADE,
-    CONSTRAINT ck_notification_settings_time
-        CHECK (notification_time = '17:30'),
+    -- 명세 v2_1에서 발송 시각이 17:30 고정에서 온보딩 시간 피커 값으로 바뀌어
+    -- ck_notification_settings_time(= '17:30')을 뺐다.
+    -- HH:mm 형식은 care_rules.rule_code와 같은 이유로 애플리케이션 입력 검증에서 강제한다.
+    -- DB에서는 버전별 CHECK 함수 호환성을 고려해 형식 검사를 두지 않는다.
     CONSTRAINT ck_notification_settings_timezone
         CHECK (timezone = 'Asia/Seoul'),
     CONSTRAINT ck_notification_settings_permission
@@ -120,7 +126,7 @@ CREATE TABLE notification_settings (
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_0900_ai_ci
-  COMMENT = '사용자별 P0 고정 알림 설정';
+  COMMENT = '사용자별 알림 설정';
 
 -- -----------------------------------------------------------------------------
 -- 관리규칙 정의와 승인
@@ -610,12 +616,11 @@ CREATE TABLE care_results (
                 AND retry_used = FALSE
             )
         ),
-    CONSTRAINT ck_care_results_similarity
-        CHECK (
-            (similar_report_id IS NULL AND similarity_score IS NULL)
-            OR
-            (similar_report_id IS NOT NULL AND similarity_score >= 5)
-        ),
+    -- similar_report_id는 fk_care_results_similar_report의 ON DELETE SET NULL 대상이므로
+    -- MySQL 제약상 CHECK에 사용할 수 없다. 점수 하한만 DB에서 강제하고
+    -- similar_report_id와 similarity_score의 짝 맞춤은 서비스 계층 규칙 G에서 보장한다.
+    CONSTRAINT ck_care_results_similarity_score
+        CHECK (similarity_score IS NULL OR similarity_score >= 5),
     CONSTRAINT ck_care_results_summary_not_blank
         CHECK (CHAR_LENGTH(TRIM(summary)) > 0)
 ) ENGINE = InnoDB
@@ -969,6 +974,8 @@ CREATE INDEX ix_analytics_events_name_occurred
 -- G. care_results:
 --    result_type은 원 보고 result_type과 일치해야 하며 similar_report_id는
 --    같은 사용자, 과거 날짜, COMPLETED 상태, 유사도 5점 이상이어야 합니다.
+--    similar_report_id와 similarity_score는 항상 함께 NULL이거나 함께 값을 가져야 합니다.
+--    참조한 보고가 삭제되어 similar_report_id가 NULL이 되면 similarity_score도 NULL로 정리합니다.
 -- H. rule_sets / care_rule_versions:
 --    신규 결과에는 ACTIVE 규칙 세트의 APPROVED 규칙 버전만 적용합니다.
 -- I. care_result_items:
