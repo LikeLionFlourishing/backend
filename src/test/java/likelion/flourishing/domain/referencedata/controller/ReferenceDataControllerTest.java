@@ -6,12 +6,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import likelion.flourishing.domain.referencedata.service.ReferenceDataService;
 import likelion.flourishing.global.config.CorsProperties;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
+import static org.mockito.BDDMockito.given;
+
+import likelion.flourishing.domain.report.repository.GuideSectionCopyRepository;
+import likelion.flourishing.domain.report.service.GuideSectionAssembler;
+import likelion.flourishing.domain.report.service.GuideSectionFixtures;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -23,15 +32,27 @@ import org.springframework.test.web.servlet.MockMvc;
  *
  * <p>CorsProperties는 SecurityConfig가 아니라 WebMvcConfigurer인 CorsConfig가 요구한다.
  * CorsConfig는 @WebMvcTest 슬라이스에 포함되므로 이 선언은 남겨 둔다.
+ *
+ * <p>가이드 섹션 문구는 DB에서 오므로 저장소만 가짜로 둔다. 조립기는 진짜를 쓴다. 섹션이 어떤
+ * 순서로 나가고 비었다고 표시되는지가 이 응답의 계약이라, 그 계산까지 가짜로 두면 검증이 사라진다.
  */
 @WebMvcTest(ReferenceDataController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(ReferenceDataService.class)
+@Import({ReferenceDataService.class, GuideSectionAssembler.class})
 @EnableConfigurationProperties(CorsProperties.class)
 class ReferenceDataControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private GuideSectionCopyRepository guideSectionCopyRepository;
+
+    @BeforeEach
+    void setUp() {
+        given(guideSectionCopyRepository.findAllByOrderByDisplayOrderAsc())
+                .willReturn(GuideSectionFixtures.defaultCopies());
+    }
 
     @Test
     void getsSkinReportOptions() throws Exception {
@@ -55,6 +76,12 @@ class ReferenceDataControllerTest {
                 .andExpect(jsonPath("$.situations[5].value").value("NONE_RECALLED"))
                 .andExpect(jsonPath("$.careAvailability.length()").value(4))
                 .andExpect(jsonPath("$.preCareChecks.length()").value(4))
-                .andExpect(jsonPath("$.preCareChecks[3].value").value("NONE"));
+                .andExpect(jsonPath("$.preCareChecks[3].value").value("NONE"))
+                .andExpect(jsonPath("$.guideSections.length()").value(6))
+                .andExpect(jsonPath("$.guideSections[0].key").value("CURRENT_SUMMARY"))
+                .andExpect(jsonPath("$.guideSections[0].title").value("지금 상태"))
+                .andExpect(jsonPath("$.guideSections[5].key").value("RECOMMENDED_INGREDIENTS"))
+                // 결과가 없는 화면이라 여섯 섹션 모두 빈 상태다.
+                .andExpect(jsonPath("$.guideSections[*].empty", everyItem(is(true))));
     }
 }

@@ -334,6 +334,46 @@ CREATE TABLE rule_actions (
 CREATE INDEX ix_rule_actions_version_active_priority
     ON rule_actions (rule_version_id, active, priority, display_order);
 
+-- 결과 카드의 가이드 섹션 제목·설명.
+-- 프론트가 문구를 하드코딩하지 않도록 서버가 준다. 결과가 없을 때도 화면을 그릴 수 있게
+-- /v1/reference-data/skin-report-options 에서도 같은 값을 내보낸다.
+--
+-- 결과에 스냅샷하지 않는 이유: 항목 문구와 달리 섹션 제목은 편집상의 표현이라, 나중에 다듬은
+-- 문구가 과거 결과에도 반영되는 편이 자연스럽다. 사용자에게 안내한 내용 자체는
+-- care_result_items 와 care_result_ingredients 가 스냅샷으로 붙잡는다.
+CREATE TABLE guide_sections (
+    section_key VARCHAR(30) NOT NULL,
+    title VARCHAR(50) NOT NULL,
+    description VARCHAR(300) NOT NULL,
+    display_order INT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+        ON UPDATE CURRENT_TIMESTAMP(6),
+
+    CONSTRAINT pk_guide_sections PRIMARY KEY (section_key),
+    CONSTRAINT uq_guide_sections_order UNIQUE (display_order),
+    CONSTRAINT ck_guide_sections_key
+        CHECK (
+            section_key IN (
+                'CURRENT_SUMMARY',
+                'DO_TODAY',
+                'AVOID_TODAY',
+                'SIMILAR_EXPERIENCE',
+                'CHECK_NEXT',
+                'RECOMMENDED_INGREDIENTS'
+            )
+        ),
+    CONSTRAINT ck_guide_sections_title_not_blank
+        CHECK (CHAR_LENGTH(TRIM(title)) > 0),
+    CONSTRAINT ck_guide_sections_description_not_blank
+        CHECK (CHAR_LENGTH(TRIM(description)) > 0),
+    CONSTRAINT ck_guide_sections_order
+        CHECK (display_order BETWEEN 1 AND 6)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '결과 카드 가이드 섹션의 제목과 설명';
+
 CREATE TABLE rule_evidence_sources (
     id BINARY(16) NOT NULL,
     rule_version_id BINARY(16) NOT NULL,
