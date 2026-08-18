@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -161,7 +162,7 @@ class AuthServiceTest {
     @Test
     void completeSignupStampsCompletionTime() {
         User user = persisted(User.register(EMAIL, "hashed"));
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user));
 
         LocalDateTime completedAt = authService.completeSignup(principal(), ONBOARDING_TIME);
 
@@ -173,21 +174,80 @@ class AuthServiceTest {
     void completeSignupKeepsFirstCompletionTime() {
         User user = persisted(User.register(EMAIL, "hashed"));
         user.completeSignup(ONBOARDING_TIME);
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user));
 
         LocalDateTime completedAt = authService.completeSignup(principal(), ONBOARDING_TIME.plusDays(3));
 
         assertThat(completedAt).isEqualTo(ONBOARDING_TIME);
     }
 
+    /**
+     * 최초 시각을 유지한다는 약속은 잠금 없이는 성립하지 않는다. 잠그지 않고 읽으면 겹친 두 요청이
+     * 모두 비어 있는 상태를 읽어, 나중에 커밋한 쪽이 먼저 쓴 시각을 덮는다.
+     */
+    @Test
+    void completeSignupReadsUserWithRowLock() {
+        User user = persisted(User.register(EMAIL, "hashed"));
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user));
+
+        authService.completeSignup(principal(), ONBOARDING_TIME);
+
+        verify(userRepository).findByIdForUpdate(USER_ID);
+        verify(userRepository, never()).findById(USER_ID);
+    }
+
     @Test
     void completeSignupRejectsUnknownUser() {
-        when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.completeSignup(principal(), ONBOARDING_TIME))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.AUTHENTICATION_REQUIRED);
+    }
+
+    /**
+     * 제3자가 남의 이메일로 창을 채워도 정당한 로그인을 막지 못해야 한다. 자격 증명을 확인하기
+     * 전에 이메일 창을 세면 이 요청이 429가 되어 계정이 잠긴다.
+     */
+    @Test
+    void loginWithCorrectPasswordIsNotBlockedByEmailWindow() {
+        User user = persisted(User.register(EMAIL, "hashed"));
+        when(userRepository.findByNormalizedEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(PASSWORD, "hashed")).thenReturn(true);
+
+        AuthSessionIssue issue = authService.login(new LoginRequest(EMAIL, PASSWORD), CLIENT_IP);
+
+        assertThat(issue.sessionToken()).isEqualTo("session-token");
+        verify(rateLimiter, never()).consume(eq("login-email"), anyString(), anyInt(), any(Duration.class));
+        verify(rateLimiter).reset("login-email", EMAIL);
+    }
+
+    /** 틀린 비밀번호만 창을 채운다. 대입 방어는 그대로 남는다. */
+    @Test
+    void failedLoginConsumesTheEmailWindow() {
+        User user = persisted(User.register(EMAIL, "hashed"));
+        when(userRepository.findByNormalizedEmail(EMAIL)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), CLIENT_IP))
+                .isInstanceOf(BusinessException.class);
+
+        verify(rateLimiter).consume(eq("login-email"), eq(EMAIL), anyInt(), any(Duration.class));
+        verify(rateLimiter, never()).reset(anyString(), anyString());
+    }
+
+    /** 없는 이메일로 실패해도 같은 창을 쓴다. 응답은 여전히 INVALID_CREDENTIALS다. */
+    @Test
+    void failedLoginForUnknownEmailAlsoConsumesTheWindow() {
+        when(userRepository.findByNormalizedEmail(anyString())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), CLIENT_IP))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_CREDENTIALS);
+
+        verify(rateLimiter).consume(eq("login-email"), eq(EMAIL), anyInt(), any(Duration.class));
     }
 
     private AuthenticatedUser principal() {

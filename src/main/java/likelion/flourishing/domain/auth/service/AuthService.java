@@ -65,23 +65,45 @@ public class AuthService {
         return toIssue(user, session);
     }
 
+    /**
+     * 로그인.
+     *
+     * <p>이메일 단위 제한은 <b>실패한 시도만</b> 센다. 자격 증명을 확인하기 전에 세면 제3자가 남의
+     * 이메일로 창을 채우는 것만으로 그 계정의 정당한 로그인까지 429로 막을 수 있다. IP를 바꿔가며
+     * 채우면 잠금이 무기한 이어진다. 비밀번호가 맞는 요청은 창 상태와 무관하게 통과시키고,
+     * 성공하면 그동안 쌓인 실패 기록을 지운다.
+     *
+     * <p>대입 방어는 그대로 남는다. 틀린 비밀번호는 계속 창을 채우므로 이메일 하나당 시도 횟수가
+     * 여전히 묶이고, 요청 자체의 총량은 IP 단위 제한이 먼저 막는다.
+     */
     @Transactional
     public AuthSessionIssue login(LoginRequest request, String clientIp) {
         String normalizedEmail = User.normalizeEmail(request.email());
         checkRateLimit("login-ip", clientIp, authProperties.rateLimit().loginPerIp());
-        checkRateLimit("login-email", normalizedEmail, authProperties.rateLimit().loginPerEmail());
 
         User user = userRepository.findByNormalizedEmail(normalizedEmail).orElse(null);
         if (user == null) {
             passwordEncoder.matches(request.password(), DUMMY_PASSWORD_HASH);
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+            throw failedLogin(normalizedEmail);
         }
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+            throw failedLogin(normalizedEmail);
         }
 
+        rateLimiter.reset("login-email", normalizedEmail);
         IssuedSession session = sessionService.issue(user.getId());
         return toIssue(user, session);
+    }
+
+    /**
+     * 실패한 시도를 세고 자격 증명 오류를 만든다.
+     *
+     * <p>창을 넘겼으면 여기서 {@link TooManyRequestsException}이 먼저 나간다. 이 자리에 온 요청은
+     * 이미 비밀번호가 틀린 것이라, 429와 401 중 무엇이 나가든 알려 주는 정보가 늘지 않는다.
+     */
+    private BusinessException failedLogin(String normalizedEmail) {
+        checkRateLimit("login-email", normalizedEmail, authProperties.rateLimit().loginPerEmail());
+        return new BusinessException(ErrorCode.INVALID_CREDENTIALS);
     }
 
     @Transactional(readOnly = true)
@@ -104,13 +126,17 @@ public class AuthService {
      * 온보딩이 최초 설정을 마쳤을 때 호출한다. users는 auth가 소유하므로 다른 도메인이
      * 엔티티를 직접 다루지 않고 이 메서드를 거친다.
      *
-     * <p>이미 완료한 사용자를 다시 호출해도 최초 시각을 유지한다.
+     * <p>이미 완료한 사용자를 다시 호출해도 최초 시각을 유지한다. 이 약속을 지키려고 행에 잠금을
+     * 걸고 읽는다. 잠그지 않으면 온보딩 완료 요청이 겹쳤을 때 두 트랜잭션이 모두
+     * signup_completed_at이 비어 있는 상태를 읽고 각자 다른 시각을 써서, 나중에 커밋한 쪽이
+     * 최초 시각을 덮어쓴다.
      *
      * @return 반영된 가입 완료 시각. 명세 Onboarding.completedAt 값이다.
      */
     @Transactional
     public LocalDateTime completeSignup(AuthenticatedUser principal, LocalDateTime now) {
-        User user = findUser(principal);
+        User user = userRepository.findByIdForUpdate(principal.userId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTHENTICATION_REQUIRED));
         user.completeSignup(now);
         return user.getSignupCompletedAt();
     }
@@ -125,6 +151,12 @@ public class AuthService {
         userRepository.delete(user);
     }
 
+    /**
+     * 가입은 중복 이메일을 409 EMAIL_ALREADY_REGISTERED로 알려 준다. 명세가 정한 계약이라 따르지만,
+     * 로그인이 없는 이메일과 틀린 비밀번호를 같은 오류로 감추는 것과는 방향이 다르다. 즉 가입
+     * 엔드포인트는 계정 존재 여부를 그대로 알려 준다. IP 단위 제한(1시간 10회)만 있고 이메일 단위
+     * 제한이 없어 IP를 나누면 열거가 가능하다는 것도 함께 알고 있는 상태다.
+     */
     private User saveNewUser(RegisterRequest request) {
         try {
             return userRepository.saveAndFlush(
