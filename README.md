@@ -107,6 +107,19 @@ DB_PASSWORD=<비밀번호> docker compose --profile app up --build
 - 스키마: `db/schema.sql`
 - 애플리케이션은 스키마를 자동 생성하거나 변경하지 않습니다.
 
+### 마이그레이션
+
+`db/migration/`에 날짜순으로 둡니다. 이미 데이터가 있는 DB에 새 스키마를 적용하기 전에
+해당 스크립트를 먼저 돌려야 합니다.
+
+| 스크립트 | 선행 조건 |
+|---|---|
+| `2026-08-18_v2_1_follow_ups.sql` | `follow_ups`에 `skin_change`가 `NEW_AREA`·`UNSURE`이거나 `action_completion`이 NULL인 행이 남아 있으면 명세 v2_1의 CHECK 제약을 만들 수 없습니다. |
+
+```bash
+docker exec -i flourishing-mysql mysql -uroot -p<비밀번호> flourishing < db/migration/2026-08-18_v2_1_follow_ups.sql
+```
+
 ## 브랜치 전략
 
 - `develop`: 기본 개발 브랜치

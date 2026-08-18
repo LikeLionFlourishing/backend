@@ -75,6 +75,30 @@ public enum ErrorCode {
             "이미 보고된 날",
             "피부 보고가 저장된 날은 불편 없음으로 바꿀 수 없습니다."
     ),
+    FOLLOW_UP_KIND_MISMATCH(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "FOLLOW_UP_KIND_MISMATCH",
+            "경과 종류 불일치",
+            "이 보고에 맞지 않는 경과 종류입니다."
+    ),
+    FOLLOW_UP_NOT_AVAILABLE_YET(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "FOLLOW_UP_NOT_AVAILABLE_YET",
+            "아직 입력할 수 없음",
+            "경과는 다음 날부터 입력할 수 있습니다."
+    ),
+    FOLLOW_UP_EXPIRED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "FOLLOW_UP_EXPIRED",
+            "입력 기한 지남",
+            "경과 입력 기한이 지났습니다."
+    ),
+    FOLLOW_UP_ALREADY_SUBMITTED(
+            HttpStatus.CONFLICT,
+            "FOLLOW_UP_ALREADY_SUBMITTED",
+            "이미 저장된 경과",
+            "이미 저장한 경과는 다른 내용으로 바꿀 수 없습니다."
+    ),
     TOO_MANY_REQUESTS(
             HttpStatus.TOO_MANY_REQUESTS,
             "TOO_MANY_REQUESTS",
