@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.net.SocketTimeoutException;
 import java.net.http.HttpClient;
 import java.net.http.HttpTimeoutException;
+import java.util.concurrent.CancellationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -196,10 +198,19 @@ public class OpenAiResponsesClient {
         }
     }
 
-    /** 제한 시간 초과와 그 밖의 연결 실패를 가른다. 명세가 시간 초과를 따로 다루기 때문이다. */
+    /**
+     * 제한 시간 초과와 그 밖의 연결 실패를 가른다. 명세가 시간 초과를 따로 다루기 때문이다.
+     *
+     * <p>{@link CancellationException}도 시간 초과로 본다. JDK HttpClient는 요청 제한 시간이 지나면
+     * 내부 future를 취소하는데, 취소가 {@link HttpTimeoutException}보다 먼저 전파되면 호출부에는
+     * 취소 예외만 올라온다. 이 클라이언트는 제한 시간 말고는 요청을 취소하지 않으므로 취소는 곧
+     * 시간 초과다.
+     */
     private boolean isTimeout(Throwable exception) {
         for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
-            if (cause instanceof HttpTimeoutException || cause instanceof java.net.SocketTimeoutException) {
+            if (cause instanceof HttpTimeoutException
+                    || cause instanceof SocketTimeoutException
+                    || cause instanceof CancellationException) {
                 return true;
             }
             if (cause.getCause() == cause) {

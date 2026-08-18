@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
@@ -36,6 +38,7 @@ class OpenAiResponsesClientTest {
     private final AtomicReference<String> recordedBody = new AtomicReference<>();
     private final AtomicReference<String> recordedAuthorization = new AtomicReference<>();
     private final AtomicInteger responseDelayMillis = new AtomicInteger(0);
+    private final CountDownLatch teardown = new CountDownLatch(1);
 
     @BeforeEach
     void startServer() throws IOException {
@@ -43,7 +46,7 @@ class OpenAiResponsesClientTest {
         server.createContext("/v1/responses", exchange -> {
             recordedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             recordedAuthorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
-            sleep(responseDelayMillis.get());
+            awaitUntilTeardown(responseDelayMillis.get());
             byte[] body = responseBody.get().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(responseStatus.get(), body.length);
@@ -56,6 +59,7 @@ class OpenAiResponsesClientTest {
 
     @AfterEach
     void stopServer() {
+        teardown.countDown();
         server.stop(0);
     }
 
@@ -135,9 +139,17 @@ class OpenAiResponsesClientTest {
         assertThat(outcome.failureCode()).isEqualTo(AiFailureCode.AI_MALFORMED_OUTPUT);
     }
 
+    /**
+     * 지연을 제한 시간의 30배로 벌린다.
+     *
+     * <p>이전에는 지연 400ms에 제한 시간 100ms였다. 여유가 4배뿐이어서 CPU 경합이 심한 CI에서는 응답
+     * 헤더가 제한 시간 경계에 걸쳤고, 헤더를 받은 뒤 본문에서 끊기면 {@code HttpTimeoutException}이
+     * 아니라 EOF {@code IOException}이 올라와 AI_UNREACHABLE로 분류됐다. 여유를 벌리면 헤더가 창
+     * 안에 들어올 일이 없어 제한 시간 초과 경로만 남는다.
+     */
     @Test
     void readTimeoutIsReportedAsTimeout() {
-        responseDelayMillis.set(400);
+        responseDelayMillis.set(3_000);
         responseBody.set(completedResponse("{}"));
 
         OpenAiJsonOutcome outcome = client(Duration.ofMillis(100)).requestStructuredJson(
@@ -187,12 +199,18 @@ class OpenAiResponsesClientTest {
         }
     }
 
-    private void sleep(int millis) {
+    /**
+     * 응답을 늦춘다. 잠드는 대신 teardown 래치를 기다린다.
+     *
+     * <p>고정 수면으로 늦추면 테스트가 끝난 뒤에도 핸들러 스레드가 남는다. 래치를 쓰면 대기 시간을
+     * 넉넉하게 잡아도 {@link #stopServer()}에서 즉시 깨어난다.
+     */
+    private void awaitUntilTeardown(int millis) {
         if (millis <= 0) {
             return;
         }
         try {
-            Thread.sleep(millis);
+            teardown.await(millis, TimeUnit.MILLISECONDS);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         }
