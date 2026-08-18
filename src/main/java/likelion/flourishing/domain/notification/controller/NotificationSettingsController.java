@@ -1,11 +1,14 @@
 package likelion.flourishing.domain.notification.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.notification.dto.request.UpdateNotificationSettingsRequest;
 import likelion.flourishing.domain.notification.dto.response.NotificationSettingsResponse;
+import likelion.flourishing.domain.notification.service.NotificationSettingsPatchReader;
 import likelion.flourishing.domain.notification.service.NotificationSettingsService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -29,9 +32,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationSettingsController {
 
     private final NotificationSettingsService notificationSettingsService;
+    private final NotificationSettingsPatchReader patchReader;
 
-    public NotificationSettingsController(NotificationSettingsService notificationSettingsService) {
+    public NotificationSettingsController(
+            NotificationSettingsService notificationSettingsService,
+            NotificationSettingsPatchReader patchReader
+    ) {
         this.notificationSettingsService = notificationSettingsService;
+        this.patchReader = patchReader;
     }
 
     @Operation(summary = "알림 설정 조회")
@@ -44,14 +52,22 @@ public class NotificationSettingsController {
                 .body(notificationSettingsService.getSettings(principal));
     }
 
+    /**
+     * 본문을 JsonNode 로 받는 이유는 "보내지 않음"과 "명시적 null"을 구분해야 하기 때문이다.
+     * 문서에는 실제 스키마가 드러나야 하므로 @RequestBody 로 타입을 따로 알려 준다.
+     */
     @Operation(summary = "알림 설정 변경")
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = true,
+            content = @Content(schema = @Schema(implementation = UpdateNotificationSettingsRequest.class))
+    )
     @PatchMapping
     public ResponseEntity<NotificationSettingsResponse> updateSettings(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody UpdateNotificationSettingsRequest request
+            @RequestBody JsonNode body
     ) {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(notificationSettingsService.updateSettings(principal, request));
+                .body(notificationSettingsService.updateSettings(principal, patchReader.read(body)));
     }
 }

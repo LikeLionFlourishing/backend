@@ -64,6 +64,22 @@ public class UserConsent {
         this.consentedAt = consentedAt;
     }
 
+    /**
+     * 동의를 철회한다. 행을 지우지 않는 이유는 "동의한 적이 없다"와 "동의했다가 물렸다"가
+     * 다른 사실이기 때문이다. uq_user_consents_version 때문에 같은 버전 행은 하나뿐이라
+     * 상태를 뒤집는 쪽으로 남긴다.
+     */
+    public void withdraw(LocalDateTime at) {
+        this.accepted = false;
+        this.consentedAt = at;
+    }
+
+    /** 철회했던 동의를 다시 받는다. 동의 시각은 다시 받은 시점이다. */
+    public void reaccept(LocalDateTime at) {
+        this.accepted = true;
+        this.consentedAt = at;
+    }
+
     public static UserConsent accept(
             UUID userId,
             ConsentType consentType,

@@ -9,15 +9,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
+import likelion.flourishing.domain.notification.dto.request.NotificationConsentInput;
 import likelion.flourishing.domain.notification.dto.request.UpdateNotificationSettingsRequest;
 import likelion.flourishing.domain.notification.dto.response.NotificationSettingsResponse;
 import likelion.flourishing.domain.notification.repository.PushSubscriptionRepository;
 import likelion.flourishing.domain.onboarding.repository.UserConsentRepository;
 import likelion.flourishing.global.config.OnboardingProperties;
 import likelion.flourishing.domain.onboarding.entity.ConsentType;
+import likelion.flourishing.domain.onboarding.entity.UserConsent;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
 import likelion.flourishing.domain.onboarding.entity.NotificationPermission;
@@ -36,6 +41,8 @@ import org.mockito.quality.Strictness;
 class NotificationSettingsServiceTest {
 
     private static final UUID USER_ID = UUID.fromString("2c56fe08-ea1f-45fc-915d-c35b7c0bca39");
+    private static final Instant NOW = Instant.parse("2026-08-19T03:00:00Z");
+    private static final String ACTIVE_VERSION = "2026-08-16";
     private static final UUID SESSION_ID = UUID.fromString("5ecb88d8-6a21-4a54-8967-72599f078963");
 
     @Mock
@@ -55,10 +62,13 @@ class NotificationSettingsServiceTest {
                 notificationSettingRepository,
                 pushSubscriptionRepository,
                 userConsentRepository,
-                new OnboardingProperties("2026-08-16", "2026-08-16")
+                new OnboardingProperties("2026-08-16", "2026-08-16"),
+                Clock.fixed(NOW, ZoneOffset.UTC)
         );
         when(notificationSettingRepository.saveAndFlush(any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        // 켜기에는 활성 버전 동의가 있어야 한다. 동의를 다루지 않는 테스트는 이 기본값을 쓴다.
+        storedConsent(true);
     }
 
     @Test
@@ -95,7 +105,7 @@ class NotificationSettingsServiceTest {
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(setting));
 
         NotificationSettingsResponse response = service.updateSettings(
-                principal(), new UpdateNotificationSettingsRequest(true, null)
+                principal(), new UpdateNotificationSettingsRequest(true, null, null)
         );
 
         assertThat(response.isEnabled()).isTrue();
@@ -108,7 +118,7 @@ class NotificationSettingsServiceTest {
         NotificationSetting setting = NotificationSetting.create(USER_ID, true, "21:00", NotificationPermission.GRANTED);
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(setting));
 
-        service.updateSettings(principal(), new UpdateNotificationSettingsRequest(false, null));
+        service.updateSettings(principal(), new UpdateNotificationSettingsRequest(false, null, null));
 
         assertThat(setting.getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
         assertThat(setting.isEnabled()).isFalse();
@@ -120,7 +130,7 @@ class NotificationSettingsServiceTest {
         NotificationSetting setting = NotificationSetting.create(USER_ID, true, "21:00", NotificationPermission.GRANTED);
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(setting));
 
-        service.updateSettings(principal(), new UpdateNotificationSettingsRequest(true, null));
+        service.updateSettings(principal(), new UpdateNotificationSettingsRequest(true, null, null));
 
         assertThat(setting.getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
     }
@@ -130,7 +140,7 @@ class NotificationSettingsServiceTest {
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
         NotificationSettingsResponse response = service.updateSettings(
-                principal(), new UpdateNotificationSettingsRequest(true, null)
+                principal(), new UpdateNotificationSettingsRequest(true, null, null)
         );
 
         assertThat(response.isEnabled()).isTrue();
@@ -147,7 +157,7 @@ class NotificationSettingsServiceTest {
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(stored));
 
         NotificationSettingsResponse response = service.updateSettings(
-                principal(), new UpdateNotificationSettingsRequest(true, null)
+                principal(), new UpdateNotificationSettingsRequest(true, null, null)
         );
 
         assertThat(response.isEnabled()).isTrue();
@@ -172,17 +182,135 @@ class NotificationSettingsServiceTest {
         assertThat(response.getConsent().agreedAt()).isNull();
     }
 
-    /** P0에서 시각 변경은 제공하지 않는다. 명세가 이 경우를 422 FEATURE_NOT_AVAILABLE로 정한다. */
+    /**
+     * 명세가 time 만 담긴 요청도 받도록 정한다. timeEditable 은 화면에 변경 UI 를 노출할지에 대한
+     * 값일 뿐이라 API 가 값을 받지 않는다는 뜻이 아니다.
+     */
     @Test
-    void changingTheTimeIsRejectedAsNotAvailableYet() {
+    void changingOnlyTheTimeKeepsTheEnabledFlag() {
+        NotificationSetting setting = NotificationSetting.create(
+                USER_ID, true, "17:30", NotificationPermission.GRANTED
+        );
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(setting));
+
+        NotificationSettingsResponse response = service.updateSettings(
+                principal(), new UpdateNotificationSettingsRequest(null, "21:00", null)
+        );
+
+        assertThat(response.getTime()).isEqualTo("21:00");
+        assertThat(response.isEnabled()).isTrue();
+    }
+
+    /** 켜기에는 이번 요청이든 이전 기록이든 활성 버전 동의가 있어야 한다. */
+    @Test
+    void enablingWithoutAnyConsentIsRejected() {
+        storedConsent(false);
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(
+                NotificationSetting.create(USER_ID, false, "17:30", NotificationPermission.GRANTED)
+        ));
+
         assertThatThrownBy(() -> service.updateSettings(
-                principal(), new UpdateNotificationSettingsRequest(true, "21:00")
+                principal(), new UpdateNotificationSettingsRequest(true, null, null)
         ))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
-                .isEqualTo(ErrorCode.FEATURE_NOT_AVAILABLE);
+                .isEqualTo(ErrorCode.CONSENT_REQUIRED);
+    }
 
-        verify(notificationSettingRepository, never()).saveAndFlush(any());
+    /** 한 요청으로 "동의하면서 켜기"가 되어야 한다. 동의를 먼저 반영하지 않으면 422가 난다. */
+    @Test
+    void enablingWithConsentInTheSameRequestIsAllowed() {
+        storedConsent(false);
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(
+                NotificationSetting.create(USER_ID, false, "17:30", NotificationPermission.GRANTED)
+        ));
+        when(userConsentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userConsentRepository.findByUserIdAndConsentTypeAndConsentVersion(
+                USER_ID, ConsentType.NOTIFICATION, ACTIVE_VERSION))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(UserConsent.accept(
+                        USER_ID, ConsentType.NOTIFICATION, ACTIVE_VERSION,
+                        LocalDateTime.ofInstant(NOW, ZoneOffset.UTC)
+                )));
+
+        NotificationSettingsResponse response = service.updateSettings(
+                principal(),
+                new UpdateNotificationSettingsRequest(
+                        true, null, new NotificationConsentInput(true, ACTIVE_VERSION)
+                )
+        );
+
+        assertThat(response.isEnabled()).isTrue();
+        verify(userConsentRepository).save(any(UserConsent.class));
+    }
+
+    /** 끄기는 동의 없이도 언제나 된다. */
+    @Test
+    void disablingNeedsNoConsent() {
+        storedConsent(false);
+        NotificationSetting setting = NotificationSetting.create(
+                USER_ID, true, "17:30", NotificationPermission.GRANTED
+        );
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(setting));
+
+        NotificationSettingsResponse response = service.updateSettings(
+                principal(), new UpdateNotificationSettingsRequest(false, null, null)
+        );
+
+        assertThat(response.isEnabled()).isFalse();
+    }
+
+    /** 철회는 행을 지우지 않고 상태를 뒤집는다. "동의한 적 없음"과 "물렸음"은 다른 사실이다. */
+    @Test
+    void withdrawingConsentFlipsTheStoredRowInsteadOfDeletingIt() {
+        UserConsent stored = UserConsent.accept(
+                USER_ID, ConsentType.NOTIFICATION, ACTIVE_VERSION,
+                LocalDateTime.ofInstant(NOW, ZoneOffset.UTC).minusDays(3)
+        );
+        when(userConsentRepository.findByUserIdAndConsentTypeAndConsentVersion(
+                USER_ID, ConsentType.NOTIFICATION, ACTIVE_VERSION)).thenReturn(Optional.of(stored));
+        when(userConsentRepository.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(
+                NotificationSetting.create(USER_ID, false, "17:30", NotificationPermission.GRANTED)
+        ));
+
+        service.updateSettings(
+                principal(),
+                new UpdateNotificationSettingsRequest(
+                        null, null, new NotificationConsentInput(false, ACTIVE_VERSION)
+                )
+        );
+
+        assertThat(stored.isAccepted()).isFalse();
+        verify(userConsentRepository, never()).delete(any());
+    }
+
+    /** 문구가 바뀌면 다시 받아야 한다. 온보딩과 같은 규칙이다. */
+    @Test
+    void consentWithAnInactiveVersionIsRejected() {
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(
+                NotificationSetting.create(USER_ID, false, "17:30", NotificationPermission.GRANTED)
+        ));
+
+        assertThatThrownBy(() -> service.updateSettings(
+                principal(),
+                new UpdateNotificationSettingsRequest(
+                        null, null, new NotificationConsentInput(true, "2026-01-01")
+                )
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CONSENT_VERSION_NOT_ACCEPTED);
+    }
+
+    private void storedConsent(boolean agreed) {
+        when(userConsentRepository.findByUserIdAndConsentTypeAndConsentVersion(
+                USER_ID, ConsentType.NOTIFICATION, ACTIVE_VERSION))
+                .thenReturn(agreed
+                        ? Optional.of(UserConsent.accept(
+                                USER_ID, ConsentType.NOTIFICATION, ACTIVE_VERSION,
+                                LocalDateTime.ofInstant(NOW, ZoneOffset.UTC)))
+                        : Optional.empty());
     }
 
     /** 설정 화면의 시각 변경은 P1이라 P0 배포에서는 항상 false다. */
