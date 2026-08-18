@@ -20,7 +20,7 @@ public class OpenApiConfig {
     public OpenAPI flourishingOpenApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("관리하는 행보관 API")
+                        .title("제대로 API")
                         .version("v1")
                         .description("현역 장병용 피부 셀프케어 PWA API"))
                 // 서버 목록을 직접 정한다. 비워 두면 springdoc 이 요청 주소로 채우는데,
