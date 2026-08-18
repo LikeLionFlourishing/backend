@@ -1,6 +1,10 @@
 package likelion.flourishing.domain.analytics.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import likelion.flourishing.domain.analytics.dto.request.AnalyticsEventBatchRequest;
@@ -26,6 +30,11 @@ public class AnalyticsEventController {
     }
 
     @Operation(summary = "사용자 측정 이벤트 일괄 접수")
+    @ApiResponse(
+            responseCode = "202",
+            description = "이벤트 접수 완료",
+            content = @Content(schema = @Schema(implementation = AnalyticsEventBatchResponse.class))
+    )
     @PostMapping
     public ResponseEntity<AnalyticsEventBatchResponse> collect(
             @AuthenticationPrincipal AuthenticatedUser principal,

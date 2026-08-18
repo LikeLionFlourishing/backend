@@ -1,6 +1,10 @@
 package likelion.flourishing.domain.home.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -48,6 +52,18 @@ public class HomeController {
     }
 
     @Operation(summary = "오늘 불편 없음 저장")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "최초 저장",
+                    content = @Content(schema = @Schema(implementation = DailyCheckInResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "같은 값이 이미 저장되어 있음",
+                    content = @Content(schema = @Schema(implementation = DailyCheckInResponse.class))
+            )
+    })
     @PutMapping("/daily-check-ins/{date}")
     public ResponseEntity<DailyCheckInResponse> saveNoDiscomfortCheckIn(
             @AuthenticationPrincipal AuthenticatedUser principal,
