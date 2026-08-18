@@ -722,6 +722,8 @@ CREATE TABLE follow_ups (
     user_id BINARY(16) NOT NULL,
     kind VARCHAR(30) NOT NULL,
     skin_change VARCHAR(30) NOT NULL,
+    -- 명세 v2_1에서 두 종류 모두 받는 값이 되었다. NOT NULL로 좁히지 않는 이유는
+    -- ck_follow_ups_type_payload가 이미 종류별 필수 여부를 강제하고 있어서다.
     action_completion VARCHAR(30) NULL,
     clinician_check_status VARCHAR(40) NULL,
     submitted_at DATETIME(6) NOT NULL,
@@ -734,8 +736,10 @@ CREATE TABLE follow_ups (
         ON UPDATE RESTRICT ON DELETE CASCADE,
     CONSTRAINT ck_follow_ups_kind
         CHECK (kind IN ('SELF_CARE', 'CLINICIAN_CHECK')),
+    -- 명세 v2_1에서 NEW_AREA, UNSURE가 빠져 세 개가 됐다. 두 값이 남아 있는 기존 행이 있으면
+    -- 이 CHECK를 만들 수 없으므로 배포 전에 마이그레이션이 필요하다.
     CONSTRAINT ck_follow_ups_skin_change
-        CHECK (skin_change IN ('IMPROVED', 'SIMILAR', 'WORSENED', 'NEW_AREA', 'UNSURE')),
+        CHECK (skin_change IN ('IMPROVED', 'SIMILAR', 'WORSENED')),
     CONSTRAINT ck_follow_ups_action_completion
         CHECK (
             action_completion IS NULL
@@ -746,18 +750,15 @@ CREATE TABLE follow_ups (
             clinician_check_status IS NULL
             OR clinician_check_status IN ('CHECKED', 'NOT_YET', 'PREFER_NOT_TO_RECORD')
         ),
+    -- 명세 v2_1에서 CLINICIAN_CHECK도 action_completion을 받게 되어, 이 값은 종류와 무관하게
+    -- 항상 있어야 한다. 두 모양을 가르는 것은 clinician_check_status 하나만 남았다.
     CONSTRAINT ck_follow_ups_type_payload
         CHECK (
-            (
-                kind = 'SELF_CARE'
-                AND action_completion IS NOT NULL
-                AND clinician_check_status IS NULL
-            )
-            OR
-            (
-                kind = 'CLINICIAN_CHECK'
-                AND action_completion IS NULL
-                AND clinician_check_status IS NOT NULL
+            action_completion IS NOT NULL
+            AND (
+                (kind = 'SELF_CARE' AND clinician_check_status IS NULL)
+                OR
+                (kind = 'CLINICIAN_CHECK' AND clinician_check_status IS NOT NULL)
             )
         )
 ) ENGINE = InnoDB

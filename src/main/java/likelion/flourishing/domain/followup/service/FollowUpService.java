@@ -1,19 +1,16 @@
 package likelion.flourishing.domain.followup.service;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.Optional;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.followup.dto.request.SaveFollowUpRequest;
 import likelion.flourishing.domain.followup.dto.response.FollowUpResponse;
-import likelion.flourishing.domain.followup.entity.FollowUp;
-import likelion.flourishing.domain.followup.entity.FollowUpKind;
-import likelion.flourishing.domain.followup.repository.FollowUpReportRepository;
-import likelion.flourishing.domain.followup.repository.FollowUpReportRepository.ReportRow;
 import likelion.flourishing.domain.followup.repository.FollowUpRepository;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,18 +18,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class FollowUpService {
 
-    private final FollowUpRepository followUpRepository;
-    private final FollowUpReportRepository followUpReportRepository;
-    private final Clock clock;
+    private static final Logger log = LoggerFactory.getLogger(FollowUpService.class);
 
-    public FollowUpService(
-            FollowUpRepository followUpRepository,
-            FollowUpReportRepository followUpReportRepository,
-            Clock clock
-    ) {
+    private final FollowUpRepository followUpRepository;
+    private final FollowUpWriter followUpWriter;
+
+    public FollowUpService(FollowUpRepository followUpRepository, FollowUpWriter followUpWriter) {
         this.followUpRepository = followUpRepository;
-        this.followUpReportRepository = followUpReportRepository;
-        this.clock = clock;
+        this.followUpWriter = followUpWriter;
     }
 
     /**
@@ -49,49 +42,31 @@ public class FollowUpService {
     }
 
     /**
-     * 경과를 저장하고 보고를 COMPLETED로 바꾼다. 보고당 한 번만 저장할 수 있다.
+     * 경과를 저장한다. 같은 내용을 다시 보내면 저장된 값을 그대로 돌려주고, 내용이 다르면 409를 낸다.
      *
-     * <p>같은 내용을 다시 보내면 저장된 값을 그대로 돌려준다. 네트워크가 끊겨 재요청한 경우를
-     * 실패로 만들지 않기 위해서다. 내용이 다르면 덮어쓰기 시도로 보아 409를 낸다.
-     *
-     * <p>확인 순서는 소유권 → 종류 → 기한 → 기존 경과다. 남의 보고인지부터 걸러야
-     * 뒤이은 오류 메시지로 남의 보고 상태가 새어 나가지 않는다.
+     * <p>트랜잭션은 저장 단계에만 건다. 같은 보고에 첫 저장이 겹치면 둘 다 저장된 경과가 없다고
+     * 보고 각자 넣으려다 뒤늦은 쪽이 uq_follow_ups_report에 걸리는데, 그 트랜잭션이 되돌아간 뒤
+     * 다시 읽어야 먼저 저장된 경과가 보인다.
      */
-    @Transactional
     public SavedFollowUp saveFollowUp(
             AuthenticatedUser principal,
             UUID reportId,
             SaveFollowUpRequest request
     ) {
         UUID userId = principal.userId();
-        ReportRow report = followUpReportRepository.findOwnedReport(reportId, userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-
-        if (FollowUpKind.forResultType(report.resultType()) != request.kind()) {
-            throw new BusinessException(ErrorCode.FOLLOW_UP_KIND_MISMATCH);
+        try {
+            return followUpWriter.saveFollowUp(userId, reportId, request);
+        } catch (DataIntegrityViolationException | ConcurrencyFailureException raced) {
+            // 재시도 때는 먼저 저장된 경과가 보인다. 같은 내용이면 200, 다른 내용이면 409가 되어
+            // 겹치지 않았을 때와 같은 결과가 나간다. 재시도는 한 번뿐이고, 두 번째도 제약에
+            // 걸리면 원인이 경합이 아니라는 뜻이라 그대로 올린다.
+            //
+            // 유니크 위반만 잡지 않는 이유는, 지는 쪽 INSERT가 이긴 쪽이 커밋할 때까지 대기하다가
+            // 잠금 대기 시간을 넘기거나 서로 물릴 수 있기 때문이다. 이긴 쪽이 같은 트랜잭션에서
+            // markCompleted까지 하고 커밋하므로 대기 구간이 짧다고 보기도 어렵다.
+            // 둘 다 ConcurrencyFailureException 계열이라 따로 받지 않으면 그대로 500이 된다.
+            log.warn("경과 저장이 경합으로 실패해 한 번 더 시도합니다. type={}", raced.getClass().getSimpleName());
+            return followUpWriter.saveFollowUp(userId, reportId, request);
         }
-
-        Optional<FollowUp> existing = followUpRepository.findByReportIdAndUserId(reportId, userId);
-        if (existing.isPresent()) {
-            FollowUp followUp = existing.get();
-            if (!followUp.hasSameContentAs(request)) {
-                throw new BusinessException(ErrorCode.FOLLOW_UP_ALREADY_SUBMITTED);
-            }
-            return new SavedFollowUp(FollowUpResponse.from(followUp), false);
-        }
-
-        // 기한 확인은 기존 경과를 본 다음에 한다. 이미 저장한 뒤 기한이 지나도
-        // 같은 내용의 재요청은 계속 200으로 돌려주어야 하기 때문이다.
-        LocalDateTime now = LocalDateTime.now(clock);
-        if (now.isBefore(report.followUpAvailableAt())) {
-            throw new BusinessException(ErrorCode.FOLLOW_UP_NOT_AVAILABLE_YET);
-        }
-        if (now.isAfter(report.followUpExpiresAt())) {
-            throw new BusinessException(ErrorCode.FOLLOW_UP_EXPIRED);
-        }
-
-        FollowUp saved = followUpRepository.saveAndFlush(FollowUp.of(reportId, userId, request, now));
-        followUpReportRepository.markCompleted(reportId, userId);
-        return new SavedFollowUp(FollowUpResponse.from(saved), true);
     }
 }
