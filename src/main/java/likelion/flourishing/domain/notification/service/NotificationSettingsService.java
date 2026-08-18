@@ -72,9 +72,13 @@ public class NotificationSettingsService {
         UUID userId = principal.userId();
         NotificationSetting setting = notificationSettingRepository.findById(userId)
                 .orElseGet(() -> NotificationSetting.create(
-                        userId, request.enabled(), NotificationPermission.DEFAULT
+                        userId,
+                        request.enabled(),
+                        NotificationSetting.DEFAULT_TIME,
+                        NotificationPermission.DEFAULT
                 ));
-        setting.update(request.enabled(), setting.getPermissionState());
+        // 시각은 이 요청으로 바꾸지 않는다. 저장된 값을 그대로 다시 넣는다.
+        setting.update(request.enabled(), setting.getNotificationTime(), setting.getPermissionState());
 
         NotificationSetting saved = notificationSettingRepository.saveAndFlush(setting);
         return toResponse(saved, pushSubscriptionRepository.countByUserIdAndActiveIsTrue(userId));

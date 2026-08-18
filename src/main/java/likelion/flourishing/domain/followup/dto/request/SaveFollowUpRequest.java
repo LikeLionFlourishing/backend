@@ -2,6 +2,7 @@ package likelion.flourishing.domain.followup.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import likelion.flourishing.domain.followup.entity.ActionCompletion;
 import likelion.flourishing.domain.followup.entity.FollowUpKind;
 import likelion.flourishing.domain.followup.entity.SkinChange;
 
@@ -29,4 +30,7 @@ public sealed interface SaveFollowUpRequest permits SelfCareFollowUpRequest, Cli
     FollowUpKind kind();
 
     SkinChange skinChange();
+
+    /** 명세 v2_1에서 두 종류가 모두 받는 값이라 공통 계약으로 올렸다. */
+    ActionCompletion actionCompletion();
 }
