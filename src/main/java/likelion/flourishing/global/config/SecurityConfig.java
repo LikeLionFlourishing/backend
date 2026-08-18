@@ -73,6 +73,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/v1/sessions").permitAll()
                         .requestMatchers("/v1/sessions/current", "/v1/me").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/v1/me/onboarding").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/v1/home").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/v1/daily-check-ins/*").authenticated()
                         .anyRequest().denyAll()
                 )
                 .formLogin(formLogin -> formLogin.disable())
