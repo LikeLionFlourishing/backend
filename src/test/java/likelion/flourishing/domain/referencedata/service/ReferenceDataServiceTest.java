@@ -15,11 +15,11 @@ class ReferenceDataServiceTest {
     void returnsVersionedSkinReportOptions() {
         SkinReportOptionsResponse response = referenceDataService.getSkinReportOptions();
 
-        assertThat(response.getVersion()).isEqualTo("2026-08-09");
+        assertThat(response.getVersion()).isEqualTo("2026-08-16");
         assertThat(response.getAreas()).hasSize(13);
-        assertThat(response.getAppearances()).hasSize(8);
-        assertThat(response.getSensations()).hasSize(7);
-        assertThat(response.getSituations()).hasSize(9);
+        assertThat(response.getAppearances()).hasSize(6);
+        assertThat(response.getSensations()).hasSize(3);
+        assertThat(response.getSituations()).hasSize(6);
         assertThat(response.getCareAvailability()).hasSize(4);
         assertThat(response.getPreCareChecks()).hasSize(4);
     }

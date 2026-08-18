@@ -15,7 +15,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class ReferenceDataService {
 
-    private static final String OPTIONS_VERSION = "2026-08-09";
+    /**
+     * 명세 SkinReportOptions.version. 선택값 구성이 바뀔 때마다 올린다.
+     *
+     * <p>v2_1에서 느껴지는 불편, 직전 상황, 겉모습 세 그룹이 바뀌어 2026-08-16이 됐다.
+     * 클라이언트는 이 값이 달라지면 캐시한 선택값을 버려야 한다.
+     */
+    private static final String OPTIONS_VERSION = "2026-08-16";
     private static final SkinReportOptionsResponse SKIN_REPORT_OPTIONS = createSkinReportOptions();
 
     public SkinReportOptionsResponse getSkinReportOptions() {

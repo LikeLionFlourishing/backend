@@ -473,9 +473,8 @@ CREATE TABLE report_appearances (
     CONSTRAINT ck_report_appearances_code
         CHECK (
             appearance_code IN (
-                'REDNESS', 'SMALL_BUMPS', 'WHITE_TIPPED_BUMPS',
-                'RED_BUMPS_AROUND_HAIR', 'ROUGHNESS_FLAKING',
-                'OOZING', 'CRUST', 'UNSURE'
+                'APP_REDNESS', 'APP_BUMP', 'APP_PUS_BUMP',
+                'APP_DRYNESS', 'APP_OILINESS', 'APP_OTHER'
             )
         )
 ) ENGINE = InnoDB
@@ -498,8 +497,7 @@ CREATE TABLE report_sensations (
     CONSTRAINT ck_report_sensations_code
         CHECK (
             sensation_code IN (
-                'ITCHING', 'STINGING_BURNING', 'PAIN_WHEN_PRESSED',
-                'PAIN_AT_REST', 'HEAT', 'TIGHTNESS', 'NONE'
+                'REDNESS', 'EXCESS_SEBUM', 'BREAKOUT'
             )
         )
 ) ENGINE = InnoDB
@@ -522,10 +520,8 @@ CREATE TABLE report_situations (
     CONSTRAINT ck_report_situations_code
         CHECK (
             situation_code IN (
-                'SHAVING', 'SWEAT_OR_DUST_AFTER_TRAINING',
-                'PROTECTIVE_GEAR_OR_MASK', 'DELAYED_WASHING',
-                'NEW_PRODUCT', 'TOUCHED_OR_SQUEEZED',
-                'SLEEP_DEPRIVATION', 'OTHER', 'NONE_RECALLED'
+                'PROTECTIVE_GEAR_OR_MASK', 'SHAVING', 'SQUEEZED_ACNE',
+                'NEW_PRODUCT', 'SWEAT_OR_SEBUM', 'NONE_RECALLED'
             )
         )
 ) ENGINE = InnoDB
