@@ -94,7 +94,7 @@ class VapidTokenFactoryTest {
     }
 
     private static PushNotificationProperties properties(String publicKey, String privateKey, String subject) {
-        return new PushNotificationProperties(new Vapid(publicKey, privateKey, subject), null, null, null);
+        return new PushNotificationProperties(new Vapid(publicKey, privateKey, subject), null, null, null, null);
     }
 
     /** ECPrivateKey의 스칼라를 32바이트 고정 길이로 만든다. VAPID 설정이 쓰는 표현이다. */

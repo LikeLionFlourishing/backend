@@ -41,9 +41,9 @@ import org.springframework.test.web.servlet.MockMvc;
 /**
  * FollowUpController의 HTTP 계약 테스트. 서비스는 가짜(mock)로 두고 요청·응답 모양만 검증한다.
  *
- * <p>핵심은 kind에 따라 본문 모양이 갈리는 oneOf가 제대로 매핑되는지다. SELF_CARE 본문은
- * actionCompletion으로, CLINICIAN_CHECK 본문은 clinicianCheckStatus로 읽혀야 하고,
- * 응답에서도 해당 종류의 필드만 나가야 한다.
+ * <p>핵심은 kind에 따라 본문 모양이 갈리는 oneOf가 제대로 매핑되는지다. 명세 v2_1에서
+ * actionCompletion이 두 종류 공통이 되어, 두 모양을 가르는 것은 clinicianCheckStatus 하나다.
+ * SELF_CARE 응답에는 그 필드가 나가지 않아야 한다.
  */
 @WebMvcTest(FollowUpController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -81,8 +81,9 @@ class FollowUpControllerTest {
                 .andExpect(jsonPath("$.submittedAt").exists());
     }
 
+    /** 명세 v2_1에서 의료진 확인 경과도 행동 실행 여부를 함께 받고, 응답에도 함께 담는다. */
     @Test
-    void saveClinicianReturnsCreatedWithoutActionField() throws Exception {
+    void saveClinicianReturnsCreatedWithBothAnswers() throws Exception {
         when(followUpService.saveFollowUp(any(), any(), any()))
                 .thenReturn(new SavedFollowUp(clinicianResponse(), true));
 
@@ -90,11 +91,28 @@ class FollowUpControllerTest {
                         .with(authentication(authenticationToken()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"kind":"CLINICIAN_CHECK","skinChange":"SIMILAR","clinicianCheckStatus":"CHECKED"}
+                                {"kind":"CLINICIAN_CHECK","skinChange":"SIMILAR",\
+                                "actionCompletion":"PARTLY_DONE","clinicianCheckStatus":"CHECKED"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.clinicianCheckStatus").value("CHECKED"))
-                .andExpect(jsonPath("$.actionCompletion").doesNotExist());
+                .andExpect(jsonPath("$.actionCompletion").value("PARTLY_DONE"));
+    }
+
+    /** 의료진 확인 여부만 보내면 거절한다. 행동 실행 여부는 v2_1에서 필수가 됐다. */
+    @Test
+    void saveClinicianRejectsMissingActionCompletion() throws Exception {
+        mockMvc.perform(put(PATH)
+                        .with(authentication(authenticationToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"kind":"CLINICIAN_CHECK","skinChange":"SIMILAR","clinicianCheckStatus":"CHECKED"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors[0].field").value("actionCompletion"));
+
+        verify(followUpService, never()).saveFollowUp(any(), any(), any());
     }
 
     @Test
@@ -198,7 +216,7 @@ class FollowUpControllerTest {
                 REPORT_ID,
                 FollowUpKind.CLINICIAN_CHECK,
                 SkinChange.SIMILAR,
-                null,
+                ActionCompletion.PARTLY_DONE,
                 ClinicianCheckStatus.CHECKED,
                 OffsetDateTime.of(2026, 8, 11, 12, 0, 0, 0, ZoneOffset.UTC)
         );

@@ -21,6 +21,8 @@ import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -105,6 +107,34 @@ class SessionServiceTest {
         );
 
         assertThat(principal).isPresent();
+    }
+
+    /**
+     * PUT·PATCH·DELETE도 상태 변경 메서드로 분류되는지 확인한다. 안전 메서드 목록의 여집합으로
+     * 판정하므로 지금은 자동으로 걸리지만, 누군가 목록을 손대면 CSRF 검사가 조용히 빠진다.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"PUT", "PATCH", "DELETE"})
+    void authenticateRequiresCsrfTokenForEveryStateChangingMethod(String method) {
+        String sessionToken = sessionTokenFactory.createSessionToken();
+        when(userSessionRepository.findBySessionTokenHash(any()))
+                .thenReturn(Optional.of(activeSession(sessionToken)));
+
+        assertThatThrownBy(() -> sessionService.authenticate(sessionToken, method, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CSRF_TOKEN_INVALID);
+    }
+
+    /** 안전 메서드는 CSRF 토큰 없이 통과한다. */
+    @ParameterizedTest
+    @ValueSource(strings = {"GET", "HEAD", "OPTIONS"})
+    void authenticatePassesSafeMethodsWithoutCsrfToken(String method) {
+        String sessionToken = sessionTokenFactory.createSessionToken();
+        when(userSessionRepository.findBySessionTokenHash(any()))
+                .thenReturn(Optional.of(activeSession(sessionToken)));
+
+        assertThat(sessionService.authenticate(sessionToken, method, null)).isPresent();
     }
 
     @Test

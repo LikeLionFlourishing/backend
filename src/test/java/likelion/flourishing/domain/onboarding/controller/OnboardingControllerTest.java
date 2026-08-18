@@ -1,5 +1,6 @@
 package likelion.flourishing.domain.onboarding.controller;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,6 +16,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
+import likelion.flourishing.domain.onboarding.dto.response.NotificationConsentResponse;
 import likelion.flourishing.domain.onboarding.dto.response.OnboardingResponse;
 import likelion.flourishing.domain.onboarding.entity.NotificationPermission;
 import likelion.flourishing.domain.onboarding.service.OnboardingService;
@@ -36,12 +38,14 @@ import org.springframework.test.web.servlet.MockMvc;
 /**
  * OnboardingController의 HTTP 계약 테스트. 서비스는 가짜(mock)로 두고 요청·응답 모양만 검증한다.
  *
- * <p>확인하는 것: 정상 요청이 200과 다섯 필드를 돌려주는지, 그리고 잘못된 요청 네 가지가
+ * <p>확인하는 것: 두 갈래의 정상 요청이 200과 명세 필드를 돌려주는지, 그리고 잘못된 요청들이
  * 서비스까지 가지 않고 각각 맞는 상태 코드로 막히는지.
  *
  * <ul>
  *   <li>sensitiveDataConsent가 false — 422. 명세가 const true로 못 박은 필수 동의라 거절을 저장하지 않는다.
  *   <li>notificationPermission 누락, consentVersion 공백 — 422. 값 검증 실패라 어느 필드인지 함께 담는다.
+ *   <li>알림을 켜면서 동의 2/2나 피커 값을 빠뜨림 — 422. 명세 if/then 갈래의 필수값이다.
+ *   <li>HH:mm이 아닌 시각 — 422.
  *   <li>정의되지 않은 필드, enum에 없는 값 — 400. 본문을 객체로 만들지 못한 단계의 실패다.
  * </ul>
  */
@@ -60,6 +64,7 @@ class OnboardingControllerTest {
     @MockitoBean
     private OnboardingService onboardingService;
 
+    /** 시간 피커에서 21:00을 고르고 `시작하기`를 누른 갈래. */
     @Test
     void completeOnboardingReturnsSavedState() throws Exception {
         when(onboardingService.complete(any(), any())).thenReturn(onboardingResponse());
@@ -68,15 +73,45 @@ class OnboardingControllerTest {
                         .with(authentication(authenticationToken()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consentVersion":"2026-08-09","sensitiveDataConsent":true,\
-                                "notificationEnabled":true,"notificationPermission":"GRANTED"}
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":true,\
+                                "notificationEnabled":true,"notificationPermission":"GRANTED",\
+                                "notificationTime":"21:00","notificationConsent":true,\
+                                "notificationConsentVersion":"2026-08-16"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.consentVersion").value("2026-08-09"))
+                .andExpect(jsonPath("$.consentVersion").value("2026-08-16"))
                 .andExpect(jsonPath("$.consentedAt").exists())
                 .andExpect(jsonPath("$.notificationEnabled").value(true))
                 .andExpect(jsonPath("$.notificationPermission").value("GRANTED"))
+                .andExpect(jsonPath("$.notificationTime").value("21:00"))
+                .andExpect(jsonPath("$.notificationConsent.agreed").value(true))
+                .andExpect(jsonPath("$.notificationConsent.version").value("2026-08-16"))
+                .andExpect(jsonPath("$.notificationConsent.agreedAt").exists())
                 .andExpect(jsonPath("$.completedAt").exists());
+    }
+
+    /**
+     * `알림을 받지 않을게요` 갈래. 피커 값과 동의 2/2 없이도 통과해야 하고,
+     * 응답의 agreedAt은 명세가 필수이면서 nullable이라 null로 담겨 나가야 한다.
+     */
+    @Test
+    void completeOnboardingAcceptsSkippedNotification() throws Exception {
+        when(onboardingService.complete(any(), any())).thenReturn(skippedOnboardingResponse());
+
+        mockMvc.perform(put("/v1/me/onboarding")
+                        .with(authentication(authenticationToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":true,\
+                                "notificationEnabled":false,"notificationPermission":"DEFAULT"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notificationEnabled").value(false))
+                .andExpect(jsonPath("$.notificationTime").value("17:30"))
+                .andExpect(jsonPath("$.notificationConsent.agreed").value(false))
+                .andExpect(jsonPath("$.notificationConsent.version").value("2026-08-16"))
+                // 키가 아예 빠지면 JsonPath가 실패하므로 "필드는 있고 값이 null"을 확인하는 셈이다.
+                .andExpect(jsonPath("$.notificationConsent.agreedAt").value(nullValue()));
     }
 
     @Test
@@ -85,12 +120,66 @@ class OnboardingControllerTest {
                         .with(authentication(authenticationToken()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consentVersion":"2026-08-09","sensitiveDataConsent":false,\
-                                "notificationEnabled":true,"notificationPermission":"GRANTED"}
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":false,\
+                                "notificationEnabled":false,"notificationPermission":"DEFAULT"}
                                 """))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.errors[0].field").value("sensitiveDataConsent"));
+
+        verify(onboardingService, never()).complete(any(), any());
+    }
+
+    /** 알림을 켜 두고 동의 2/2를 보내지 않으면 발송 근거가 없는 기록이 남는다. */
+    @Test
+    void completeOnboardingRejectsEnabledNotificationWithoutConsent() throws Exception {
+        mockMvc.perform(put("/v1/me/onboarding")
+                        .with(authentication(authenticationToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":true,\
+                                "notificationEnabled":true,"notificationPermission":"GRANTED",\
+                                "notificationTime":"21:00"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors[0].field").value("notificationConsentPresentWhenEnabled"));
+
+        verify(onboardingService, never()).complete(any(), any());
+    }
+
+    /** 피커 값이 빠지면 사용자가 고르지 않은 시각에 알림이 가므로 기본값으로 때우지 않는다. */
+    @Test
+    void completeOnboardingRejectsEnabledNotificationWithoutTime() throws Exception {
+        mockMvc.perform(put("/v1/me/onboarding")
+                        .with(authentication(authenticationToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":true,\
+                                "notificationEnabled":true,"notificationPermission":"GRANTED",\
+                                "notificationConsent":true,"notificationConsentVersion":"2026-08-16"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors[0].field").value("notificationTimePresentWhenEnabled"));
+
+        verify(onboardingService, never()).complete(any(), any());
+    }
+
+    @Test
+    void completeOnboardingRejectsMalformedNotificationTime() throws Exception {
+        mockMvc.perform(put("/v1/me/onboarding")
+                        .with(authentication(authenticationToken()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":true,\
+                                "notificationEnabled":true,"notificationPermission":"GRANTED",\
+                                "notificationTime":"9:5","notificationConsent":true,\
+                                "notificationConsentVersion":"2026-08-16"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors[0].field").value("notificationTime"));
 
         verify(onboardingService, never()).complete(any(), any());
     }
@@ -101,8 +190,8 @@ class OnboardingControllerTest {
                         .with(authentication(authenticationToken()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consentVersion":"2026-08-09","sensitiveDataConsent":true,\
-                                "notificationEnabled":true}
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":true,\
+                                "notificationEnabled":false}
                                 """))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
@@ -118,7 +207,7 @@ class OnboardingControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"consentVersion":"  ","sensitiveDataConsent":true,\
-                                "notificationEnabled":true,"notificationPermission":"GRANTED"}
+                                "notificationEnabled":false,"notificationPermission":"DEFAULT"}
                                 """))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
@@ -131,8 +220,8 @@ class OnboardingControllerTest {
                         .with(authentication(authenticationToken()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consentVersion":"2026-08-09","sensitiveDataConsent":true,\
-                                "notificationEnabled":true,"notificationPermission":"GRANTED",\
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":true,\
+                                "notificationEnabled":false,"notificationPermission":"DEFAULT",\
                                 "marketingConsent":true}
                                 """))
                 .andExpect(status().isBadRequest())
@@ -147,8 +236,8 @@ class OnboardingControllerTest {
                         .with(authentication(authenticationToken()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"consentVersion":"2026-08-09","sensitiveDataConsent":true,\
-                                "notificationEnabled":true,"notificationPermission":"MAYBE"}
+                                {"consentVersion":"2026-08-16","sensitiveDataConsent":true,\
+                                "notificationEnabled":false,"notificationPermission":"MAYBE"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
@@ -168,10 +257,24 @@ class OnboardingControllerTest {
 
     private OnboardingResponse onboardingResponse() {
         return OnboardingResponse.of(
-                "2026-08-09",
+                "2026-08-16",
                 OffsetDateTime.of(2026, 8, 11, 7, 0, 0, 0, ZoneOffset.UTC),
                 true,
                 NotificationPermission.GRANTED,
+                "21:00",
+                NotificationConsentResponse.of(true, "2026-08-16", LocalDateTime.of(2026, 8, 11, 7, 0)),
+                OffsetDateTime.of(2026, 8, 11, 7, 0, 0, 0, ZoneOffset.UTC)
+        );
+    }
+
+    private OnboardingResponse skippedOnboardingResponse() {
+        return OnboardingResponse.of(
+                "2026-08-16",
+                OffsetDateTime.of(2026, 8, 11, 7, 0, 0, 0, ZoneOffset.UTC),
+                false,
+                NotificationPermission.DEFAULT,
+                "17:30",
+                NotificationConsentResponse.notAgreed("2026-08-16"),
                 OffsetDateTime.of(2026, 8, 11, 7, 0, 0, 0, ZoneOffset.UTC)
         );
     }
