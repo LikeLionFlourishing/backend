@@ -45,14 +45,15 @@ class RecommendedIngredientPlannerTest {
         ));
 
         // 첫 규칙 안에서는 규칙표 display_order 를 따르고, 규칙끼리는 걸린 순서를 따른다.
+        // 상한이 둘이라 세 번째 규칙표 성분은 남지 않는다.
         assertThat(planned).extracting(PlannedIngredient::code)
-                .containsExactly("ING_A", "ING_B", "ING_C");
+                .containsExactly("ING_A", "ING_B");
         assertThat(planned).extracting(PlannedIngredient::displayOrder)
-                .containsExactly(1, 2, 3);
+                .containsExactly(1, 2);
     }
 
     @Test
-    void keepsAtMostThreeIngredients() {
+    void keepsAtMostTwoIngredients() {
         List<PlannedIngredient> planned = planner.plan(List.of(rule(
                 "GEN-001",
                 ingredient("ING_A", "에이", 1),
@@ -61,9 +62,10 @@ class RecommendedIngredientPlannerTest {
                 ingredient("ING_D", "디", 4)
         )));
 
-        // 명세 maxItems 3. 우선순위가 앞선 성분이 남는다.
+        // 관리규칙 v0.3의 ING 공통 호출 조건이 최대 두 개로 정했다. 우선순위가 앞선 성분이 남는다.
+        assertThat(RecommendedIngredientPlanner.MAX_INGREDIENTS).isEqualTo(2);
         assertThat(planned).hasSize(RecommendedIngredientPlanner.MAX_INGREDIENTS);
-        assertThat(planned).extracting(PlannedIngredient::code).containsExactly("ING_A", "ING_B", "ING_C");
+        assertThat(planned).extracting(PlannedIngredient::code).containsExactly("ING_A", "ING_B");
     }
 
     private CareRuleSnapshot rule(String ruleCode, IngredientSnapshot... ingredients) {
