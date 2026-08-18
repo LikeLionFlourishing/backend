@@ -137,7 +137,7 @@ class NotificationMySqlIntegrationTest {
 
     @Test
     void onlyEnabledUsersWithActiveSubscriptionAreEvaluated() {
-        List<UUID> userIds = notificationTargetQueryRepository.findUserIdsToEvaluate(DATE);
+        List<UUID> userIds = notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30");
 
         assertThat(userIds).containsExactly(ENABLED_USER_ID);
     }
@@ -146,7 +146,7 @@ class NotificationMySqlIntegrationTest {
     void usersWithDeliveryForThatDayAreExcluded() {
         notificationDeliveryRepository.saveAndFlush(NotificationDelivery.skipped(ENABLED_USER_ID, DATE));
 
-        assertThat(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE)).isEmpty();
+        assertThat(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30")).isEmpty();
     }
 
     @Test
@@ -248,7 +248,7 @@ class NotificationMySqlIntegrationTest {
         assertThat(stored.getErrorCode()).isEqualTo("HTTP_410");
         assertThat(stored.getSentAt()).isNull();
         assertThat(pushSubscriptionRepository.findById(subscriptionId).orElseThrow().isActive()).isFalse();
-        assertThat(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE.plusDays(1))).isEmpty();
+        assertThat(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE.plusDays(1), "17:30")).isEmpty();
     }
 
     private PushSubscription saveSubscription(UUID userId, String endpoint) {

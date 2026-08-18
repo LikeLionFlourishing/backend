@@ -93,6 +93,18 @@ public enum ErrorCode {
             "이미 저장된 경과",
             "이미 저장한 경과는 다른 내용으로 바꿀 수 없습니다."
     ),
+    CONSENT_VERSION_NOT_ACCEPTED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "CONSENT_VERSION_NOT_ACCEPTED",
+            "동의서 버전 불일치",
+            "현재 받고 있는 동의서 버전이 아닙니다. 최신 동의 화면에서 다시 진행해 주세요."
+    ),
+    FEATURE_NOT_AVAILABLE(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "FEATURE_NOT_AVAILABLE",
+            "아직 제공하지 않는 기능",
+            "이 항목은 아직 바꿀 수 없습니다."
+    ),
     TOO_MANY_REQUESTS(
             HttpStatus.TOO_MANY_REQUESTS,
             "TOO_MANY_REQUESTS",

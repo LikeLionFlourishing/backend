@@ -30,15 +30,21 @@ public class NotificationTargetQueryRepository {
     /**
      * 그날 평가할 사용자 목록.
      *
-     * <p>알림을 켰고, 살아 있는 구독이 하나라도 있고, 그날 발송 이력이 아직 없는 사용자만 고른다.
-     * 이력이 있는 사용자를 SQL에서 미리 걸러 두면 재실행 때 헛돌지 않는다. 다만 이 조회만으로
-     * 중복을 막지는 않는다. 실제 차단은 PENDING 행 삽입과 유니크 제약이 한다.
+     * <p>알림을 켰고, 발송 시각이 지금이고, 살아 있는 구독이 하나라도 있고, 그날 발송 이력이
+     * 아직 없는 사용자만 고른다. 이력이 있는 사용자를 SQL에서 미리 걸러 두면 재실행 때 헛돌지
+     * 않는다. 다만 이 조회만으로 중복을 막지는 않는다. 실제 차단은 PENDING 행 삽입과 유니크
+     * 제약이 한다.
+     *
+     * <p>명세 v2_1에서 발송 시각이 사용자마다 달라져 시각 조건이 들어왔다. 정확히 일치하는 분에만
+     * 고르므로 그 분의 실행이 통째로 빠지면 그날은 건너뛴다. 이전에도 17:30 실행 하나가 실패하면
+     * 같은 결과였으므로 동작이 나빠지지는 않지만, 놓친 분을 따라잡는 처리는 별도 과제다.
      */
-    public List<UUID> findUserIdsToEvaluate(LocalDate notificationDate) {
+    public List<UUID> findUserIdsToEvaluate(LocalDate notificationDate, String notificationTime) {
         Query query = entityManager.createNativeQuery("""
                 SELECT BIN_TO_UUID(s.user_id)
                 FROM notification_settings s
                 WHERE s.enabled = TRUE
+                  AND s.notification_time = :notificationTime
                   AND EXISTS (
                       SELECT 1 FROM push_subscriptions p
                       WHERE p.user_id = s.user_id AND p.active = TRUE
@@ -50,6 +56,7 @@ public class NotificationTargetQueryRepository {
                 ORDER BY s.user_id
                 """);
         query.setParameter("notificationDate", notificationDate);
+        query.setParameter("notificationTime", notificationTime);
 
         @SuppressWarnings("unchecked")
         List<String> rows = query.getResultList();

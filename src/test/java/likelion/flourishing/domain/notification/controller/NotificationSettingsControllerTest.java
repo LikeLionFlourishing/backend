@@ -17,6 +17,7 @@ import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.notification.dto.response.NotificationSettingsResponse;
 import likelion.flourishing.domain.notification.service.NotificationSettingsService;
+import likelion.flourishing.domain.onboarding.dto.response.NotificationConsentResponse;
 import likelion.flourishing.domain.onboarding.entity.NotificationPermission;
 import likelion.flourishing.global.config.CorsProperties;
 import likelion.flourishing.global.config.ProblemProperties;
@@ -50,14 +51,14 @@ class NotificationSettingsControllerTest {
     private NotificationSettingsService notificationSettingsService;
 
     @Test
-    void getReturnsFixedTimeZoneAndNoStoreHeader() throws Exception {
+    void getReturnsUserTimeAndFixedZoneWithNoStoreHeader() throws Exception {
         when(notificationSettingsService.getSettings(any())).thenReturn(response(true, 1L));
 
         mockMvc.perform(get(PATH).with(authentication(authenticationToken())))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.enabled").value(true))
-                .andExpect(jsonPath("$.time").value("17:30"))
+                .andExpect(jsonPath("$.time").value("21:00"))
                 .andExpect(jsonPath("$.timezone").value("Asia/Seoul"))
                 .andExpect(jsonPath("$.permission").value("GRANTED"))
                 .andExpect(jsonPath("$.activeSubscriptionCount").value(1))
@@ -74,7 +75,7 @@ class NotificationSettingsControllerTest {
                         .with(authentication(authenticationToken())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false))
-                .andExpect(jsonPath("$.time").value("17:30"));
+                .andExpect(jsonPath("$.time").value("21:00"));
     }
 
     /** 명세 요청 본문은 enabled 하나뿐이다. 권한은 온보딩에서 받는다. */
@@ -127,9 +128,11 @@ class NotificationSettingsControllerTest {
     private NotificationSettingsResponse response(boolean enabled, long subscriptions) {
         return NotificationSettingsResponse.of(
                 enabled,
-                "17:30",
+                "21:00",
                 "Asia/Seoul",
+                false,
                 enabled ? NotificationPermission.GRANTED : NotificationPermission.DENIED,
+                NotificationConsentResponse.of(enabled, "2026-08-16", enabled ? LocalDateTime.of(2026, 8, 16, 3, 0) : null),
                 subscriptions
         );
     }
