@@ -38,19 +38,18 @@ GET /v1/me/notification-settings
 ```json
 {
   "enabled": true,
-  "notificationTime": "17:30",
+  "time": "17:30",
   "timezone": "Asia/Seoul",
-  "permissionState": "GRANTED",
-  "activeSubscriptionCount": 1,
-  "updatedAt": "2026-08-15T08:30:00Z"
+  "permission": "GRANTED",
+  "activeSubscriptionCount": 1
 }
 ```
 
-- `notificationTime`과 `timezone`은 P0 고정값입니다. 서버가 항상 이 두 값을 보냅니다.
-- `permissionState`: `DEFAULT` | `GRANTED` | `DENIED` | `UNSUPPORTED`
+- `time`과 `timezone`은 P0 고정값입니다. 서버가 항상 이 두 값을 보냅니다.
+- `permission`: `DEFAULT` | `GRANTED` | `DENIED` | `UNSUPPORTED`
 - `activeSubscriptionCount`가 0이면 알림을 켜 두었어도 받을 기기가 없는 상태입니다.
   이 경우 재구독을 안내하는 화면이 필요합니다.
-- 온보딩을 건너뛴 사용자는 `enabled: false`, `permissionState: "DEFAULT"`, `updatedAt: null`이 옵니다.
+- 온보딩을 건너뛴 사용자는 `enabled: false`, `permission: "DEFAULT"`가 옵니다.
 - 응답에 `Cache-Control: no-store`가 붙습니다.
 
 ## 2. 알림 설정 변경
@@ -64,15 +63,15 @@ Content-Type: application/json
 요청:
 
 ```json
-{ "enabled": true, "permissionState": "GRANTED" }
+{ "enabled": true }
 ```
 
-- `enabled`는 필수입니다. 빠지면 422 `VALIDATION_ERROR`입니다.
-- `permissionState`는 선택입니다. 보내지 않으면 서버에 저장된 값을 그대로 둡니다.
-  브라우저 권한 상태가 바뀐 시점에만 함께 보내면 됩니다.
-- 시각과 시간대는 바꿀 수 없습니다. `notificationTime` 같은 필드를 넣으면 400 `BAD_REQUEST`입니다.
+- 본문에 정의된 필드는 `enabled` 하나뿐입니다. 빠지면 422 `VALIDATION_ERROR`입니다.
+- 브라우저 권한 상태(`permission`)는 이 요청으로 바꾸지 않습니다. 온보딩(`PUT /v1/me/onboarding`)의
+  `notificationPermission`으로 보내십시오. 이 본문에 넣으면 400 `BAD_REQUEST`입니다.
+- 시각과 시간대는 바꿀 수 없습니다. `time` 같은 필드를 넣으면 400 `BAD_REQUEST`입니다.
   정의되지 않은 필드는 모두 거부합니다.
-- `enabled: true`와 `permissionState: "DENIED"` 조합도 그대로 저장됩니다. 알림을 켜겠다는 의사와
+- `enabled: true`와 `permission: "DENIED"` 조합도 그대로 남습니다. 알림을 켜겠다는 의사와
   브라우저 권한은 별개로 다룹니다.
 - 응답 본문은 조회와 같은 형식입니다.
 
@@ -84,27 +83,33 @@ X-CSRF-Token: <토큰>
 Content-Type: application/json
 ```
 
-요청은 브라우저 `PushSubscription.toJSON()` 결과를 그대로 보내면 됩니다.
+요청 본문은 브라우저 `PushSubscription.toJSON()`에서 **두 군데를 바꿔** 보냅니다.
 
 ```json
 {
-  "endpoint": "https://push.example.net/push/JzLQ3raZJfFBR0aqvOMsLrt54w4rJUsV",
+  "endpoint": "https://fcm.googleapis.com/fcm/send/JzLQ3raZJfFBR0aqvOMsLrt54w4rJUsV",
   "expirationTime": null,
   "keys": {
     "p256dh": "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4",
     "auth": "BTBZMqHH6r4Tts7J_aSIgg"
-  }
+  },
+  "userAgent": "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15"
 }
 ```
+
+- `expirationTime`은 **ISO 8601 date-time 문자열 또는 null**입니다. 브라우저가 주는 숫자
+  타임스탬프를 그대로 보내면 422 `VALIDATION_ERROR`입니다. 값이 있으면
+  `new Date(subscription.expirationTime).toISOString()`으로 변환해 주십시오.
+- `userAgent`는 **필수**이고 본문에 담습니다. `navigator.userAgent`를 그대로 넣으면 됩니다.
+  서버는 `User-Agent` 헤더를 읽지 않습니다.
 
 응답 201(신규) 또는 200(같은 endpoint 재등록):
 
 ```json
 {
-  "subscriptionId": "0198a31f-f33f-7000-8000-0000000000a1",
+  "id": "0198a31f-f33f-7000-8000-0000000000a1",
   "endpointFingerprint": "2b7f0a6c…(64자 hex)",
   "active": true,
-  "expiresAt": null,
   "createdAt": "2026-08-15T08:30:00Z",
   "updatedAt": "2026-08-15T08:30:00Z"
 }
@@ -113,8 +118,7 @@ Content-Type: application/json
 - 같은 기기에서 여러 번 보내도 행이 늘지 않습니다. 신규는 201, 갱신은 200이니 두 코드를 모두
   성공으로 처리하시면 됩니다.
 - 응답에 endpoint 원문과 키는 없습니다. 되짚을 수 없는 지문만 내려갑니다.
-  구독 해제에는 `subscriptionId`를 쓰십시오.
-- `expirationTime`은 브라우저가 준 값이 있을 때만 넣습니다. 대부분 `null`입니다.
+  구독 해제에는 `id`를 쓰십시오.
 - `User-Agent` 헤더는 서버가 기기 구분용으로 저장합니다. 별도로 넣을 것은 없습니다.
 
 ## 4. Push 구독 해제
@@ -133,11 +137,17 @@ X-CSRF-Token: <토큰>
 
 | 상태 | code | 언제 |
 |---|---|---|
-| 400 | `BAD_REQUEST` | 정의되지 않은 필드, 잘못된 enum 값, `subscriptionId`가 UUID 형식이 아닐 때 |
+| 400 | `BAD_REQUEST` | 정의되지 않은 필드, 잘못된 enum 값, 경로의 구독 번호가 UUID 형식이 아닐 때 |
 | 401 | `AUTHENTICATION_REQUIRED` | 세션 쿠키가 없거나 만료됐을 때 |
 | 403 | `CSRF_TOKEN_INVALID` | `X-CSRF-Token`이 없거나 틀릴 때 |
 | 404 | `RESOURCE_NOT_FOUND` | 구독이 없거나 다른 사용자 소유일 때 |
-| 422 | `VALIDATION_ERROR` | `enabled` 누락, `endpoint`가 https 절대 URL이 아닐 때, `p256dh`가 P-256 곡선 위의 점이 아닐 때, `auth`가 16바이트가 아닐 때 |
+| 422 | `VALIDATION_ERROR` | `enabled` 누락, `endpoint`가 허용된 push 서비스 주소가 아닐 때, `p256dh`가 P-256 곡선 위의 점이 아닐 때, `auth`가 16바이트가 아닐 때 |
+
+`endpoint`는 알려진 push 서비스 호스트만 허용합니다(`fcm.googleapis.com`,
+`push.services.mozilla.com`, `web.push.apple.com`, `notify.windows.com`). 사설·loopback·link-local
+주소는 거부합니다. 서버가 그 주소로 실제 요청을 보내기 때문에 대상을 좁혀 둔 것이고, 목록은
+`app.notifications.push.allowed-endpoint-hosts`로 조정합니다. 브라우저가 다른 호스트를 주는 환경이
+있으면 알려 주십시오.
 
 ## 구독 흐름 예시
 
@@ -150,7 +160,6 @@ await fetch('/v1/me/notification-settings', {
   headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
   body: JSON.stringify({
     enabled: permission === 'granted',
-    permissionState: permission.toUpperCase(), // GRANTED | DENIED | DEFAULT
   }),
 });
 
@@ -167,7 +176,7 @@ if (permission === 'granted') {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-    body: JSON.stringify(subscription.toJSON()),
+    body: JSON.stringify(toRequestBody(subscription)),
   });
 }
 ```

@@ -50,16 +50,16 @@ class NotificationSettingsServiceTest {
     @Test
     void settingsReportFixedTimeAndZoneWithActiveSubscriptionCount() {
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(
-                NotificationSetting.create(USER_ID, true, NotificationPermission.GRANTED)
+                NotificationSetting.create(USER_ID, true, "17:30", NotificationPermission.GRANTED)
         ));
         when(pushSubscriptionRepository.countByUserIdAndActiveIsTrue(USER_ID)).thenReturn(2L);
 
         NotificationSettingsResponse response = service.getSettings(principal());
 
         assertThat(response.isEnabled()).isTrue();
-        assertThat(response.getNotificationTime()).isEqualTo("17:30");
+        assertThat(response.getTime()).isEqualTo("17:30");
         assertThat(response.getTimezone()).isEqualTo("Asia/Seoul");
-        assertThat(response.getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
+        assertThat(response.getPermission()).isEqualTo(NotificationPermission.GRANTED);
         assertThat(response.getActiveSubscriptionCount()).isEqualTo(2L);
     }
 
@@ -71,18 +71,17 @@ class NotificationSettingsServiceTest {
         NotificationSettingsResponse response = service.getSettings(principal());
 
         assertThat(response.isEnabled()).isFalse();
-        assertThat(response.getPermissionState()).isEqualTo(NotificationPermission.DEFAULT);
-        assertThat(response.getUpdatedAt()).isNull();
+        assertThat(response.getPermission()).isEqualTo(NotificationPermission.DEFAULT);
         verify(notificationSettingRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void updateStoresEnabledFlag() {
-        NotificationSetting setting = NotificationSetting.create(USER_ID, false, NotificationPermission.GRANTED);
+        NotificationSetting setting = NotificationSetting.create(USER_ID, false, "17:30", NotificationPermission.GRANTED);
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(setting));
 
         NotificationSettingsResponse response = service.updateSettings(
-                principal(), new UpdateNotificationSettingsRequest(true, null)
+                principal(), new UpdateNotificationSettingsRequest(true)
         );
 
         assertThat(response.isEnabled()).isTrue();
@@ -92,25 +91,24 @@ class NotificationSettingsServiceTest {
 
     @Test
     void updateKeepsStoredPermissionWhenRequestOmitsIt() {
-        NotificationSetting setting = NotificationSetting.create(USER_ID, true, NotificationPermission.GRANTED);
+        NotificationSetting setting = NotificationSetting.create(USER_ID, true, "17:30", NotificationPermission.GRANTED);
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(setting));
 
-        service.updateSettings(principal(), new UpdateNotificationSettingsRequest(false, null));
+        service.updateSettings(principal(), new UpdateNotificationSettingsRequest(false));
 
         assertThat(setting.getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
         assertThat(setting.isEnabled()).isFalse();
     }
 
+    /** 권한은 온보딩에서만 바뀐다. 이 요청은 저장된 권한을 건드리지 않는다. */
     @Test
-    void updateStoresPermissionWhenProvided() {
-        NotificationSetting setting = NotificationSetting.create(USER_ID, true, NotificationPermission.GRANTED);
+    void updateKeepsStoredPermission() {
+        NotificationSetting setting = NotificationSetting.create(USER_ID, true, "17:30", NotificationPermission.GRANTED);
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(setting));
 
-        service.updateSettings(
-                principal(), new UpdateNotificationSettingsRequest(true, NotificationPermission.DENIED)
-        );
+        service.updateSettings(principal(), new UpdateNotificationSettingsRequest(true));
 
-        assertThat(setting.getPermissionState()).isEqualTo(NotificationPermission.DENIED);
+        assertThat(setting.getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
     }
 
     @Test
@@ -118,11 +116,11 @@ class NotificationSettingsServiceTest {
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
         NotificationSettingsResponse response = service.updateSettings(
-                principal(), new UpdateNotificationSettingsRequest(true, NotificationPermission.GRANTED)
+                principal(), new UpdateNotificationSettingsRequest(true)
         );
 
         assertThat(response.isEnabled()).isTrue();
-        assertThat(response.getPermissionState()).isEqualTo(NotificationPermission.GRANTED);
+        assertThat(response.getPermission()).isEqualTo(NotificationPermission.DEFAULT);
         verify(notificationSettingRepository).saveAndFlush(any(NotificationSetting.class));
     }
 
@@ -131,12 +129,15 @@ class NotificationSettingsServiceTest {
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
         when(pushSubscriptionRepository.countByUserIdAndActiveIsTrue(eq(USER_ID))).thenReturn(0L);
 
+        NotificationSetting stored = NotificationSetting.create(USER_ID, false, "17:30", NotificationPermission.DENIED);
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.of(stored));
+
         NotificationSettingsResponse response = service.updateSettings(
-                principal(), new UpdateNotificationSettingsRequest(true, NotificationPermission.DENIED)
+                principal(), new UpdateNotificationSettingsRequest(true)
         );
 
         assertThat(response.isEnabled()).isTrue();
-        assertThat(response.getPermissionState()).isEqualTo(NotificationPermission.DENIED);
+        assertThat(response.getPermission()).isEqualTo(NotificationPermission.DENIED);
         assertThat(response.getActiveSubscriptionCount()).isZero();
     }
 

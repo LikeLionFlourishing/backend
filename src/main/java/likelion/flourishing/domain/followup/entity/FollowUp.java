@@ -23,9 +23,9 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 /**
  * 보고 하나에 딸리는 다음 날 경과. report_id에 유니크 제약이 있어 보고당 한 건만 남는다.
  *
- * <p>종류에 따라 채우는 컬럼이 다르고 DDL의 CHECK가 짝을 강제한다. SELF_CARE면
- * action_completion만, CLINICIAN_CHECK면 clinician_check_status만 값이 있어야 한다.
- * 잘못된 조합이 만들어지지 않도록 생성자를 막고 종류별 정적 메서드로만 만들게 했다.
+ * <p>종류에 따라 채우는 컬럼이 다르고 DDL의 CHECK가 짝을 강제한다. action_completion은 명세
+ * v2_1에서 두 종류 모두 받는 값이 되어 항상 채우고, clinician_check_status는 CLINICIAN_CHECK에만
+ * 값이 있어야 한다. 잘못된 조합이 만들어지지 않도록 생성자를 막고 정적 메서드로만 만들게 했다.
  *
  * <p>한 번 저장하면 고치지 않는다. 그래서 updated_at이 없고 BaseTimeEntity도 상속하지 않는다.
  */
@@ -104,7 +104,7 @@ public class FollowUp {
                     userId,
                     FollowUpKind.CLINICIAN_CHECK,
                     clinician.skinChange(),
-                    null,
+                    clinician.actionCompletion(),
                     clinician.clinicianCheckStatus(),
                     submittedAt
             );
@@ -118,12 +118,13 @@ public class FollowUp {
      * 네트워크가 끊겨 같은 요청을 다시 보낸 경우와 값을 바꾸려는 경우를 가르는 기준이다.
      */
     public boolean hasSameContentAs(SaveFollowUpRequest request) {
-        if (kind != request.kind() || skinChange != request.skinChange()) {
+        if (kind != request.kind()
+                || skinChange != request.skinChange()
+                || !Objects.equals(actionCompletion, request.actionCompletion())) {
             return false;
         }
         return switch (request) {
-            case SelfCareFollowUpRequest selfCare ->
-                    Objects.equals(actionCompletion, selfCare.actionCompletion());
+            case SelfCareFollowUpRequest ignored -> true;
             case ClinicianFollowUpRequest clinician ->
                     Objects.equals(clinicianCheckStatus, clinician.clinicianCheckStatus());
         };

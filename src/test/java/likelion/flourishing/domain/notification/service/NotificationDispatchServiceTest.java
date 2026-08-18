@@ -76,7 +76,7 @@ class NotificationDispatchServiceTest {
     @Test
     void missingVapidConfigurationSkipsEverything() {
         NotificationDispatchService unconfigured = newService(
-                new PushNotificationProperties(new Vapid(null, null, null), null, null, null)
+                new PushNotificationProperties(new Vapid(null, null, null), null, null, null, null)
         );
 
         assertThat(unconfigured.dispatch(DATE)).isZero();
@@ -191,7 +191,7 @@ class NotificationDispatchServiceTest {
 
     private PushNotificationProperties configuredProperties() {
         return new PushNotificationProperties(
-                new Vapid("public-key", "private-key", "mailto:ops@example.invalid"), null, null, null
+                new Vapid("public-key", "private-key", "mailto:ops@example.invalid"), null, null, null, null
         );
     }
 }

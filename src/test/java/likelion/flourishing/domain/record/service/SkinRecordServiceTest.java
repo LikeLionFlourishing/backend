@@ -161,6 +161,56 @@ class SkinRecordServiceTest {
         verify(followUpRepository, never()).findByReportIdAndUserId(any(), any());
     }
 
+    /**
+     * 아래 세 테스트는 이 서비스가 기대하는 데이터 불변식을 고정한다.
+     *
+     * <p>읽기 경로가 이 불변식을 500으로 드러내는 것은 의도된 선택이다. 보고·관리 결과·경과는
+     * 보고 확정 흐름이 한 트랜잭션에서 함께 커밋하므로 어긋난 행은 데이터 손상이고, 조용히 가린
+     * 응답을 내보내면 손상을 모르고 지나간다. 대신 그 결합을 테스트로 못 박아 두어, 쓰기 쪽이
+     * 불변식을 깨는 방향으로 바뀌면 여기서 먼저 깨지게 한다.
+     */
+    @Test
+    void detailRejectsReportWithoutCareResult() {
+        SkinReport report = summaryReport(FIRST_ID, LocalDateTime.of(2026, 8, 15, 3, 0));
+        when(skinReportRepository.findByIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(report));
+        when(careResultRepository.findByReportIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> skinRecordService.getRecord(principal(), FIRST_ID))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("관리 결과");
+    }
+
+    @Test
+    void detailRejectsCompletedReportWithoutFollowUp() {
+        SkinReport report = detailReport();
+        CareResult careResult = careResult();
+        when(skinReportRepository.findByIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(report));
+        when(careResultRepository.findByReportIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(careResult));
+        when(followUpRepository.findByReportIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> skinRecordService.getRecord(principal(), FIRST_ID))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("경과가 없습니다");
+    }
+
+    @Test
+    void detailRejectsSimilarExperienceWithScoreButNoReport() {
+        SkinReport report = detailReport();
+        CareResult careResult = careResult();
+        FollowUp followUp = followUp();
+        RuleSet ruleSet = org.mockito.Mockito.mock(RuleSet.class);
+        when(careResult.getSimilarReportId()).thenReturn(null);
+        when(careResult.getSimilarityScore()).thenReturn(72);
+        when(skinReportRepository.findByIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(report));
+        when(careResultRepository.findByReportIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(careResult));
+        when(followUpRepository.findByReportIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(followUp));
+        when(ruleSetRepository.findById(RULE_SET_ID)).thenReturn(Optional.of(ruleSet));
+
+        assertThatThrownBy(() -> skinRecordService.getRecord(principal(), FIRST_ID))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("유사 경험");
+    }
+
     @Test
     void completedDetailContainsDecryptedTextCareResultAndFollowUp() {
         SkinReport report = detailReport();

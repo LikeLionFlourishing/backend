@@ -13,8 +13,19 @@ public enum FollowUpKind {
     SELF_CARE,
     CLINICIAN_CHECK;
 
-    /** 보고의 result_type 문자열에 대응하는 경과 종류. */
+    /**
+     * 보고의 result_type 문자열에 대응하는 경과 종류.
+     *
+     * <p>모르는 값은 조용히 한쪽으로 몰지 않고 예외로 드러낸다. 그러지 않으면 나중에 Reports가
+     * result_type을 늘렸을 때 새 값이 전부 CLINICIAN_CHECK로 매핑되어, 종류가 맞지 않는 경과가
+     * FOLLOW_UP_KIND_MISMATCH 검사를 그대로 통과한다. 여기서 터지면 스키마의 CHECK와 이 코드를
+     * 함께 고치게 된다.
+     */
     public static FollowUpKind forResultType(String resultType) {
-        return "SELF_CARE_GUIDE".equals(resultType) ? SELF_CARE : CLINICIAN_CHECK;
+        return switch (resultType == null ? "" : resultType) {
+            case "SELF_CARE_GUIDE" -> SELF_CARE;
+            case "CLINICIAN_CHECK" -> CLINICIAN_CHECK;
+            default -> throw new IllegalStateException("알 수 없는 보고 결과 유형입니다: " + resultType);
+        };
     }
 }
