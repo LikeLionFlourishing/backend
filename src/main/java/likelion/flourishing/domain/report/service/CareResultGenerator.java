@@ -15,6 +15,10 @@ import likelion.flourishing.domain.report.entity.CareResultItem;
 import likelion.flourishing.domain.report.entity.CareResultRule;
 import likelion.flourishing.domain.report.entity.ResultType;
 import likelion.flourishing.domain.report.entity.RuleActionType;
+import likelion.flourishing.domain.report.entity.CareResultIngredient;
+import likelion.flourishing.domain.report.entity.CareResultIngredientRule;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRepository;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRuleRepository;
 import likelion.flourishing.domain.report.repository.CareResultItemRepository;
 import likelion.flourishing.domain.report.repository.CareResultRepository;
 import likelion.flourishing.domain.report.repository.CareResultRuleRepository;
@@ -63,9 +67,12 @@ public class CareResultGenerator {
     private final CareRuleEngine careRuleEngine;
     private final CareGuideNarrationPort narrationPort;
     private final CareGuideItemPlanner itemPlanner;
+    private final RecommendedIngredientPlanner ingredientPlanner;
     private final CareResultRepository careResultRepository;
     private final CareResultRuleRepository careResultRuleRepository;
     private final CareResultItemRepository careResultItemRepository;
+    private final CareResultIngredientRepository careResultIngredientRepository;
+    private final CareResultIngredientRuleRepository careResultIngredientRuleRepository;
     private final Clock clock;
 
     public CareResultGenerator(
@@ -73,18 +80,24 @@ public class CareResultGenerator {
             CareRuleEngine careRuleEngine,
             CareGuideNarrationPort narrationPort,
             CareGuideItemPlanner itemPlanner,
+            RecommendedIngredientPlanner ingredientPlanner,
             CareResultRepository careResultRepository,
             CareResultRuleRepository careResultRuleRepository,
             CareResultItemRepository careResultItemRepository,
+            CareResultIngredientRepository careResultIngredientRepository,
+            CareResultIngredientRuleRepository careResultIngredientRuleRepository,
             Clock clock
     ) {
         this.careRuleCatalogPort = careRuleCatalogPort;
         this.careRuleEngine = careRuleEngine;
         this.narrationPort = narrationPort;
         this.itemPlanner = itemPlanner;
+        this.ingredientPlanner = ingredientPlanner;
         this.careResultRepository = careResultRepository;
         this.careResultRuleRepository = careResultRuleRepository;
         this.careResultItemRepository = careResultItemRepository;
+        this.careResultIngredientRepository = careResultIngredientRepository;
+        this.careResultIngredientRuleRepository = careResultIngredientRuleRepository;
         this.clock = clock;
     }
 
@@ -144,7 +157,10 @@ public class CareResultGenerator {
 
         saveAppliedRules(careResult.getId(), plan.matchedRules());
         saveItems(careResult.getId(), plan.items());
-        return new GeneratedCareResult(careResult, plan.ruleVersion(), plan.matchedRules(), plan.items());
+        saveIngredients(careResult.getId(), plan.ingredients());
+        return new GeneratedCareResult(
+                careResult, plan.ruleVersion(), plan.matchedRules(), plan.items(), plan.ingredients()
+        );
     }
 
     /**
@@ -223,7 +239,10 @@ public class CareResultGenerator {
                 requireFallbackText(allowList),
                 clinicianMessage.getFirst().content(),
                 matchedRules,
-                items
+                items,
+                // 명세가 CLINICIAN_CHECK 에 recommendedIngredients maxItems 0 을 걸어 두었다.
+                // 병원에 가 보라는 안내에 성분을 함께 주면 자가 처치를 권하는 것으로 읽힌다.
+                List.of()
         );
     }
 
@@ -242,7 +261,9 @@ public class CareResultGenerator {
                 summary,
                 null,
                 matchedRules,
-                items
+                items,
+                // 성분은 규칙표에서만 온다. AI 성공 여부와 무관하게 같은 값이 나온다.
+                ingredientPlanner.plan(matchedRules)
         );
     }
 
@@ -285,6 +306,40 @@ public class CareResultGenerator {
             ));
         }
         careResultRuleRepository.saveAll(appliedRules);
+    }
+
+    /**
+     * 추천 성분과 그 근거 규칙을 스냅샷으로 남긴다.
+     *
+     * <p>성분 사전이 나중에 바뀌어도 과거 결과에 안내한 내용이 달라지지 않아야 한다.
+     * 항목 문구를 스냅샷하는 것과 같은 이유다.
+     */
+    private void saveIngredients(UUID careResultId, List<PlannedIngredient> ingredients) {
+        if (ingredients.isEmpty()) {
+            return;
+        }
+
+        List<CareResultIngredient> saved = careResultIngredientRepository.saveAll(ingredients.stream()
+                .map(ingredient -> CareResultIngredient.snapshot(
+                        careResultId,
+                        ingredient.ingredientId(),
+                        ingredient.code(),
+                        ingredient.name(),
+                        ingredient.description(),
+                        ingredient.cautionNote(),
+                        ingredient.displayOrder()
+                ))
+                .toList());
+
+        List<CareResultIngredientRule> sourceRules = new ArrayList<>();
+        for (int index = 0; index < saved.size(); index++) {
+            CareResultIngredient stored = saved.get(index);
+            List<String> ruleCodes = ingredients.get(index).sourceRuleCodes();
+            for (int order = 0; order < ruleCodes.size(); order++) {
+                sourceRules.add(CareResultIngredientRule.of(stored.getId(), ruleCodes.get(order), order + 1));
+            }
+        }
+        careResultIngredientRuleRepository.saveAll(sourceRules);
     }
 
     private void saveItems(UUID careResultId, List<PlannedCareItem> items) {

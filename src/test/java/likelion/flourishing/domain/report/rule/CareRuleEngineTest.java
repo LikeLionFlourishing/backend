@@ -167,7 +167,8 @@ class CareRuleEngineTest {
                 List.of(),
                 conditions,
                 List.of()
-        );
+        ,
+                List.of());
     }
 
     private RuleEvaluationFacts facts(

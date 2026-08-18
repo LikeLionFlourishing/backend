@@ -43,7 +43,8 @@ public final class CareRuleFixtures {
                         action("0198a31f-f33f-7000-8000-0000000000a2", RuleActionType.AVOID_TODAY, "손으로 만지지 않기", 100, 1),
                         action("0198a31f-f33f-7000-8000-0000000000a3", RuleActionType.CHECK_NEXT, "붉은 범위가 넓어졌는지 보기", 100, 1)
                 )
-        );
+        ,
+                List.of());
     }
 
     /** 겉모습에 붉음이 있을 때 걸리는 현재 상태 규칙. */
@@ -64,7 +65,8 @@ public final class CareRuleFixtures {
                         action("0198a31f-f33f-7000-8000-0000000000b1", RuleActionType.DO_TODAY, "찬 물수건으로 진정하기", 50, 1),
                         action("0198a31f-f33f-7000-8000-0000000000b2", RuleActionType.AVOID_TODAY, "각질 제거하지 않기", 50, 1)
                 )
-        );
+        ,
+                List.of());
     }
 
     /** 관리 전 확인에서 위험 신호를 골랐을 때 걸리는 안전 규칙. */
@@ -95,7 +97,8 @@ public final class CareRuleFixtures {
                                 1
                         )
                 )
-        );
+        ,
+                List.of());
     }
 
     /** 허용 문구가 하나도 없는 규칙. 문구를 모두 끈 뒤의 상태를 재현한다. */
@@ -111,7 +114,8 @@ public final class CareRuleFixtures {
                 List.of(),
                 List.of(),
                 List.of()
-        );
+        ,
+                List.of());
     }
 
     public static ActiveRuleCatalog activeCatalog(CareRuleSnapshot... rules) {

@@ -99,7 +99,7 @@ class SkinReportSubmissionServiceTest {
                 cipher,
                 similarExperienceFinder,
                 careResultGenerator,
-                new CareGuideResponseAssembler(),
+                new CareGuideResponseAssembler(GuideSectionFixtures.assembler()),
                 skinReportWriter,
                 idempotencyService,
                 consentGuard,
@@ -308,7 +308,8 @@ class SkinReportSubmissionServiceTest {
                 resultType == ResultType.CLINICIAN_CHECK ? "가까운 의료기관에서 확인해 주세요." : null,
                 List.of(CareRuleFixtures.commonRule()),
                 List.of()
-        );
+        ,
+                List.of());
     }
 
     private GeneratedCareResult generated(UUID reportId, CareResultPlan plan) {
@@ -333,7 +334,8 @@ class SkinReportSubmissionServiceTest {
                         plan.summary(),
                         LocalDateTime.ofInstant(NOW, ZoneOffset.UTC)
                 );
-        return new GeneratedCareResult(careResult, plan.ruleVersion(), plan.matchedRules(), plan.items());
+        return new GeneratedCareResult(careResult, plan.ruleVersion(), plan.matchedRules(), plan.items(),
+                List.of());
     }
 
     private CreateSkinReportRequest request(List<PreCareCheck> preCareChecks) {

@@ -2,6 +2,14 @@ package likelion.flourishing.domain.report.service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+import likelion.flourishing.domain.report.entity.CareResultIngredient;
+import likelion.flourishing.domain.report.entity.CareResultIngredientRule;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRepository;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRuleRepository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -55,6 +63,8 @@ public class CareGuideRegenerationService {
     private final CareResultRepository careResultRepository;
     private final CareResultRuleRepository careResultRuleRepository;
     private final CareResultItemRepository careResultItemRepository;
+    private final CareResultIngredientRepository careResultIngredientRepository;
+    private final CareResultIngredientRuleRepository careResultIngredientRuleRepository;
     private final CareRuleCatalogPort careRuleCatalogPort;
     private final CareGuideNarrationPort narrationPort;
     private final CareGuideItemPlanner itemPlanner;
@@ -70,6 +80,8 @@ public class CareGuideRegenerationService {
             CareResultRepository careResultRepository,
             CareResultRuleRepository careResultRuleRepository,
             CareResultItemRepository careResultItemRepository,
+            CareResultIngredientRepository careResultIngredientRepository,
+            CareResultIngredientRuleRepository careResultIngredientRuleRepository,
             CareRuleCatalogPort careRuleCatalogPort,
             CareGuideNarrationPort narrationPort,
             CareGuideItemPlanner itemPlanner,
@@ -84,6 +96,8 @@ public class CareGuideRegenerationService {
         this.careResultRepository = careResultRepository;
         this.careResultRuleRepository = careResultRuleRepository;
         this.careResultItemRepository = careResultItemRepository;
+        this.careResultIngredientRepository = careResultIngredientRepository;
+        this.careResultIngredientRuleRepository = careResultIngredientRuleRepository;
         this.careRuleCatalogPort = careRuleCatalogPort;
         this.narrationPort = narrationPort;
         this.itemPlanner = itemPlanner;
@@ -154,6 +168,9 @@ public class CareGuideRegenerationService {
                 appliedRuleSet.versionCode(),
                 appliedRuleSet.rules(),
                 items,
+                // 재생성은 설명만 다시 만든다. 명세가 규칙 ID·버전·허용 문구와 함께 추천 성분도
+                // 바꾸지 않는다고 정하므로 저장된 스냅샷을 그대로 읽는다.
+                storedIngredients(careResult.getId()),
                 describeSimilarExperience(userId, updated)
         );
         IdempotentResponse regenerated = IdempotentResponse.ok(
@@ -220,6 +237,37 @@ public class CareGuideRegenerationService {
                         item.getContentSnapshot(),
                         item.getSourceRuleActionId(),
                         item.getDisplayOrder()
+                ))
+                .toList();
+    }
+
+    /** 저장해 둔 추천 성분과 그 근거 규칙을 다시 읽는다. 재생성이 성분을 바꾸지 않게 하는 경로다. */
+    private List<PlannedIngredient> storedIngredients(UUID careResultId) {
+        List<CareResultIngredient> stored = careResultIngredientRepository
+                .findAllByCareResultIdOrderByDisplayOrderAsc(careResultId);
+        if (stored.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, List<String>> ruleCodesByIngredient = careResultIngredientRuleRepository
+                .findAllByIdCareResultIngredientIdIn(stored.stream().map(CareResultIngredient::getId).toList())
+                .stream()
+                .sorted(Comparator.comparingInt(CareResultIngredientRule::getDisplayOrder))
+                .collect(Collectors.groupingBy(
+                        CareResultIngredientRule::careResultIngredientId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(CareResultIngredientRule::ruleCode, Collectors.toList())
+                ));
+
+        return stored.stream()
+                .map(ingredient -> new PlannedIngredient(
+                        ingredient.getSourceIngredientId(),
+                        ingredient.getIngredientCode(),
+                        ingredient.getNameSnapshot(),
+                        ingredient.getDescriptionSnapshot(),
+                        ingredient.getCautionNoteSnapshot(),
+                        ruleCodesByIngredient.getOrDefault(ingredient.getId(), List.of()),
+                        ingredient.getDisplayOrder()
                 ))
                 .toList();
     }

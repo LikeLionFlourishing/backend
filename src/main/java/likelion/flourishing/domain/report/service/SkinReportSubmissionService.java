@@ -226,6 +226,7 @@ public class SkinReportSubmissionService {
                         generated.ruleVersion(),
                         generated.appliedRules(),
                         generated.items(),
+                        generated.ingredients(),
                         lookup.found().map(FoundSimilarExperience::response).orElse(null)
                 ),
                 report.getFollowUpAvailableAt().atOffset(ZoneOffset.UTC),

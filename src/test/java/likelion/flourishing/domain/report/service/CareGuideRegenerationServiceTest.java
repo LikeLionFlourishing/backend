@@ -39,6 +39,10 @@ import likelion.flourishing.domain.report.entity.Situation;
 import likelion.flourishing.domain.report.entity.SkinReport;
 import likelion.flourishing.domain.report.idempotency.IdempotencyService;
 import likelion.flourishing.domain.report.idempotency.IdempotentResponse;
+import likelion.flourishing.domain.report.entity.CareResultIngredient;
+import likelion.flourishing.domain.report.entity.CareResultIngredientRule;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRepository;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRuleRepository;
 import likelion.flourishing.domain.report.repository.CareResultItemRepository;
 import likelion.flourishing.domain.report.repository.CareResultRepository;
 import likelion.flourishing.domain.report.repository.CareResultRuleRepository;
@@ -90,6 +94,12 @@ class CareGuideRegenerationServiceTest {
     private CareResultItemRepository careResultItemRepository;
 
     @Mock
+    private CareResultIngredientRepository careResultIngredientRepository;
+
+    @Mock
+    private CareResultIngredientRuleRepository careResultIngredientRuleRepository;
+
+    @Mock
     private CareRuleCatalogPort careRuleCatalogPort;
 
     @Mock
@@ -116,11 +126,13 @@ class CareGuideRegenerationServiceTest {
                 careResultRepository,
                 careResultRuleRepository,
                 careResultItemRepository,
+                careResultIngredientRepository,
+                careResultIngredientRuleRepository,
                 careRuleCatalogPort,
                 narrationPort,
                 new CareGuideItemPlanner(),
                 careGuideRewriter,
-                new CareGuideResponseAssembler(),
+                new CareGuideResponseAssembler(GuideSectionFixtures.assembler()),
                 similarExperienceFinder,
                 idempotencyService,
                 consentGuard,
@@ -252,6 +264,38 @@ class CareGuideRegenerationServiceTest {
                 any(),
                 anyList()
         );
+    }
+
+    /**
+     * 명세는 재생성이 "규칙 ID, 버전, 허용·금지 문구, 추천 성분을 바꾸지 않고 설명만 다시
+     * 생성한다"고 정한다. 성분을 다시 고르면 사용자가 재생성 버튼을 눌렀다는 이유로 다른 성분을
+     * 보게 된다. 그래서 저장된 스냅샷을 그대로 읽는다.
+     */
+    @Test
+    void regenerationReusesTheStoredIngredientsInsteadOfChoosingAgain() {
+        stubSuccessfulNarration();
+        CareResultIngredient stored = CareResultIngredient.snapshot(
+                UUID.randomUUID(), null, "ING_PANTHENOL", "판테놀", "진정에 쓰이는 성분입니다.", null, 1
+        );
+        when(careResultIngredientRepository.findAllByCareResultIdOrderByDisplayOrderAsc(any()))
+                .thenReturn(List.of(stored));
+        when(careResultIngredientRuleRepository.findAllByIdCareResultIngredientIdIn(anyList()))
+                .thenReturn(List.of(CareResultIngredientRule.of(stored.getId(), "GEN-001", 1)));
+
+        IdempotentResponse response = service.regenerate(principal(), REPORT_ID, null);
+
+        assertThat(response.jsonBody()).contains("\"id\":\"ING_PANTHENOL\"");
+        assertThat(response.jsonBody()).contains("\"sourceRuleIds\":[\"GEN-001\"]");
+    }
+
+    /** 저장된 성분이 없으면 빈 배열이다. 규칙에 성분이 없던 결과가 여기 해당한다. */
+    @Test
+    void regenerationWithoutStoredIngredientsReturnsAnEmptyList() {
+        stubSuccessfulNarration();
+
+        IdempotentResponse response = service.regenerate(principal(), REPORT_ID, null);
+
+        assertThat(response.jsonBody()).contains("\"recommendedIngredients\":[]");
     }
 
     @Test

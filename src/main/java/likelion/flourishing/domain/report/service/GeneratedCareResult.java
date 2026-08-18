@@ -14,11 +14,13 @@ public record GeneratedCareResult(
         CareResult careResult,
         String ruleVersion,
         List<CareRuleSnapshot> appliedRules,
-        List<PlannedCareItem> items
+        List<PlannedCareItem> items,
+        List<PlannedIngredient> ingredients
 ) {
 
     public GeneratedCareResult {
         appliedRules = List.copyOf(appliedRules);
         items = List.copyOf(items);
+        ingredients = List.copyOf(ingredients);
     }
 }

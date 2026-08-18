@@ -22,6 +22,8 @@ import likelion.flourishing.domain.report.entity.MatchReason;
 import likelion.flourishing.domain.report.entity.ResultType;
 import likelion.flourishing.domain.report.entity.RuleActionType;
 import likelion.flourishing.domain.report.entity.RuleCategory;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRepository;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRuleRepository;
 import likelion.flourishing.domain.report.repository.CareResultItemRepository;
 import likelion.flourishing.domain.report.repository.CareResultRepository;
 import likelion.flourishing.domain.report.repository.CareResultRuleRepository;
@@ -71,6 +73,12 @@ class CareResultGeneratorTest {
     @Mock
     private CareResultItemRepository careResultItemRepository;
 
+    @Mock
+    private CareResultIngredientRepository careResultIngredientRepository;
+
+    @Mock
+    private CareResultIngredientRuleRepository careResultIngredientRuleRepository;
+
     private CareResultGenerator generator;
 
     @BeforeEach
@@ -80,9 +88,12 @@ class CareResultGeneratorTest {
                 new CareRuleEngine(),
                 narrationPort,
                 new CareGuideItemPlanner(),
+                new RecommendedIngredientPlanner(),
                 careResultRepository,
                 careResultRuleRepository,
                 careResultItemRepository,
+                careResultIngredientRepository,
+                careResultIngredientRuleRepository,
                 Clock.fixed(NOW, ZoneOffset.UTC)
         );
         when(careResultRepository.saveAndFlush(any())).thenAnswer(call -> call.getArgument(0));
@@ -275,7 +286,8 @@ class CareResultGeneratorTest {
                         100,
                         1
                 ))
-        );
+        ,
+                List.of());
     }
 
     private CareResultPlan plan(ResultType resultType) {
