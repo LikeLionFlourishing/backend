@@ -345,6 +345,102 @@ CREATE TABLE rule_actions (
 CREATE INDEX ix_rule_actions_version_active_priority
     ON rule_actions (rule_version_id, active, priority, display_order);
 
+-- -----------------------------------------------------------------------------
+-- 추천 성분과 가이드 섹션 (명세 v2_1 개선 요약 7·8번)
+-- -----------------------------------------------------------------------------
+
+-- 관리 규칙표가 관리하는 성분 사전.
+-- AI는 이 표에 없는 성분을 만들어 낼 수 없다. 특정 제품·브랜드·의약품은 담지 않는다.
+CREATE TABLE care_ingredients (
+    id BINARY(16) NOT NULL,
+    ingredient_code VARCHAR(100) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(300) NOT NULL,
+    caution_note VARCHAR(300) NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+        ON UPDATE CURRENT_TIMESTAMP(6),
+
+    CONSTRAINT pk_care_ingredients PRIMARY KEY (id),
+    CONSTRAINT uq_care_ingredients_code UNIQUE (ingredient_code),
+    CONSTRAINT ck_care_ingredients_code_format
+        CHECK (ingredient_code REGEXP '^[A-Z][A-Z0-9_]*$'),
+    CONSTRAINT ck_care_ingredients_name_not_blank
+        CHECK (CHAR_LENGTH(TRIM(name)) > 0),
+    CONSTRAINT ck_care_ingredients_description_not_blank
+        CHECK (CHAR_LENGTH(TRIM(description)) > 0)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '관리 규칙표가 관리하는 추천 성분 사전';
+
+-- 규칙 버전이 권하는 성분. 한 규칙이 여러 성분을, 한 성분이 여러 규칙에 걸릴 수 있다.
+CREATE TABLE rule_version_ingredients (
+    rule_version_id BINARY(16) NOT NULL,
+    ingredient_id BINARY(16) NOT NULL,
+    display_order INT NOT NULL DEFAULT 1,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+
+    CONSTRAINT pk_rule_version_ingredients PRIMARY KEY (rule_version_id, ingredient_id),
+    CONSTRAINT uq_rule_version_ingredients_order
+        UNIQUE (rule_version_id, display_order),
+    CONSTRAINT fk_rule_version_ingredients_version
+        FOREIGN KEY (rule_version_id) REFERENCES care_rule_versions (id)
+        ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT fk_rule_version_ingredients_ingredient
+        FOREIGN KEY (ingredient_id) REFERENCES care_ingredients (id)
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    CONSTRAINT ck_rule_version_ingredients_order
+        CHECK (display_order >= 1)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '규칙 버전이 권하는 성분';
+
+CREATE INDEX ix_rule_version_ingredients_ingredient
+    ON rule_version_ingredients (ingredient_id);
+
+-- 결과 카드의 가이드 섹션 제목·설명.
+-- 프론트가 문구를 하드코딩하지 않도록 서버가 준다. 결과가 없을 때도 화면을 그릴 수 있게
+-- /v1/reference-data/skin-report-options 에서도 같은 값을 내보낸다.
+--
+-- 결과에 스냅샷하지 않는 이유: 항목 문구와 달리 섹션 제목은 편집상의 표현이라, 나중에 다듬은
+-- 문구가 과거 결과에도 반영되는 편이 자연스럽다. 사용자에게 안내한 내용 자체는
+-- care_result_items 와 care_result_ingredients 가 스냅샷으로 붙잡는다.
+CREATE TABLE guide_sections (
+    section_key VARCHAR(30) NOT NULL,
+    title VARCHAR(50) NOT NULL,
+    description VARCHAR(300) NOT NULL,
+    display_order INT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
+        ON UPDATE CURRENT_TIMESTAMP(6),
+
+    CONSTRAINT pk_guide_sections PRIMARY KEY (section_key),
+    CONSTRAINT uq_guide_sections_order UNIQUE (display_order),
+    CONSTRAINT ck_guide_sections_key
+        CHECK (
+            section_key IN (
+                'CURRENT_SUMMARY',
+                'DO_TODAY',
+                'AVOID_TODAY',
+                'SIMILAR_EXPERIENCE',
+                'CHECK_NEXT',
+                'RECOMMENDED_INGREDIENTS'
+            )
+        ),
+    CONSTRAINT ck_guide_sections_title_not_blank
+        CHECK (CHAR_LENGTH(TRIM(title)) > 0),
+    CONSTRAINT ck_guide_sections_description_not_blank
+        CHECK (CHAR_LENGTH(TRIM(description)) > 0),
+    CONSTRAINT ck_guide_sections_order
+        CHECK (display_order BETWEEN 1 AND 6)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '결과 카드 가이드 섹션의 제목과 설명';
+
 CREATE TABLE rule_evidence_sources (
     id BINARY(16) NOT NULL,
     rule_version_id BINARY(16) NOT NULL,
@@ -715,6 +811,66 @@ CREATE INDEX ix_care_result_items_result_type_order
 
 CREATE INDEX ix_care_result_items_source_action
     ON care_result_items (source_rule_action_id);
+
+-- 사용자에게 보여 준 추천 성분의 스냅샷.
+--
+-- 성분 사전이 나중에 바뀌어도 과거 결과에 안내한 내용이 달라지지 않게 값을 복사해 둔다.
+-- care_result_items 가 문구를 스냅샷하는 것과 같은 이유다.
+--
+-- 명세 maxItems 3 은 display_order CHECK 으로 강제한다. CLINICIAN_CHECK 결과에는
+-- 성분을 주지 않으므로 이 표에 행이 생기지 않는다.
+CREATE TABLE care_result_ingredients (
+    id BINARY(16) NOT NULL,
+    care_result_id BINARY(16) NOT NULL,
+    source_ingredient_id BINARY(16) NULL,
+    ingredient_code VARCHAR(100) NOT NULL,
+    name_snapshot VARCHAR(100) NOT NULL,
+    description_snapshot VARCHAR(300) NOT NULL,
+    caution_note_snapshot VARCHAR(300) NULL,
+    display_order INT NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+
+    CONSTRAINT pk_care_result_ingredients PRIMARY KEY (id),
+    CONSTRAINT uq_care_result_ingredients_order
+        UNIQUE (care_result_id, display_order),
+    CONSTRAINT uq_care_result_ingredients_code
+        UNIQUE (care_result_id, ingredient_code),
+    CONSTRAINT fk_care_result_ingredients_result
+        FOREIGN KEY (care_result_id) REFERENCES care_results (id)
+        ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT fk_care_result_ingredients_source
+        FOREIGN KEY (source_ingredient_id) REFERENCES care_ingredients (id)
+        ON UPDATE RESTRICT ON DELETE SET NULL,
+    CONSTRAINT ck_care_result_ingredients_name_not_blank
+        CHECK (CHAR_LENGTH(TRIM(name_snapshot)) > 0),
+    CONSTRAINT ck_care_result_ingredients_order
+        CHECK (display_order BETWEEN 1 AND 3)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '사용자에게 표시한 추천 성분의 스냅샷';
+
+CREATE INDEX ix_care_result_ingredients_result_order
+    ON care_result_ingredients (care_result_id, display_order);
+
+-- 각 추천 성분을 내놓은 규칙. 명세 RecommendedIngredient.sourceRuleIds 다.
+-- 값은 규칙 코드이며 같은 결과의 matchedRuleIds 의 부분집합이어야 한다.
+CREATE TABLE care_result_ingredient_rules (
+    care_result_ingredient_id BINARY(16) NOT NULL,
+    rule_code VARCHAR(100) NOT NULL,
+    display_order INT NOT NULL DEFAULT 1,
+
+    CONSTRAINT pk_care_result_ingredient_rules
+        PRIMARY KEY (care_result_ingredient_id, rule_code),
+    CONSTRAINT fk_care_result_ingredient_rules_ingredient
+        FOREIGN KEY (care_result_ingredient_id) REFERENCES care_result_ingredients (id)
+        ON UPDATE RESTRICT ON DELETE CASCADE,
+    CONSTRAINT ck_care_result_ingredient_rules_code_not_blank
+        CHECK (CHAR_LENGTH(TRIM(rule_code)) > 0)
+) ENGINE = InnoDB
+  DEFAULT CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci
+  COMMENT = '추천 성분을 내놓은 규칙 코드 (명세 sourceRuleIds)';
 
 CREATE TABLE follow_ups (
     id BINARY(16) NOT NULL,

@@ -155,7 +155,8 @@ class SkinReportWriterTest {
                 null,
                 List.of(CareRuleFixtures.commonRule()),
                 List.of()
-        );
+        ,
+                List.of());
     }
 
     private GeneratedCareResult generated(UUID reportId) {
@@ -171,7 +172,8 @@ class SkinReportWriterTest {
         );
         return new GeneratedCareResult(
                 careResult, "2026-08-15-v1", List.of(CareRuleFixtures.commonRule()), List.of()
-        );
+        ,
+                List.of());
     }
 
     private SkinReport report() {

@@ -6,6 +6,14 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
+import likelion.flourishing.domain.report.dto.response.GuideSectionResponse;
+import likelion.flourishing.domain.report.dto.response.RecommendedIngredientResponse;
+import likelion.flourishing.domain.report.entity.CareResultIngredient;
+import likelion.flourishing.domain.report.entity.CareResultIngredientRule;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRepository;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRuleRepository;
+import likelion.flourishing.domain.report.service.GuideSectionAssembler;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -64,6 +72,9 @@ public class SkinRecordService {
     private final CareRuleRepository careRuleRepository;
     private final RuleSetRepository ruleSetRepository;
     private final FollowUpRepository followUpRepository;
+    private final CareResultIngredientRepository careResultIngredientRepository;
+    private final CareResultIngredientRuleRepository careResultIngredientRuleRepository;
+    private final GuideSectionAssembler guideSectionAssembler;
     private final ReportTextCipher reportTextCipher;
     private final SkinReportCursorCodec cursorCodec;
 
@@ -76,6 +87,9 @@ public class SkinRecordService {
             CareRuleRepository careRuleRepository,
             RuleSetRepository ruleSetRepository,
             FollowUpRepository followUpRepository,
+            CareResultIngredientRepository careResultIngredientRepository,
+            CareResultIngredientRuleRepository careResultIngredientRuleRepository,
+            GuideSectionAssembler guideSectionAssembler,
             ReportTextCipher reportTextCipher,
             SkinReportCursorCodec cursorCodec
     ) {
@@ -87,6 +101,9 @@ public class SkinRecordService {
         this.careRuleRepository = careRuleRepository;
         this.ruleSetRepository = ruleSetRepository;
         this.followUpRepository = followUpRepository;
+        this.careResultIngredientRepository = careResultIngredientRepository;
+        this.careResultIngredientRuleRepository = careResultIngredientRuleRepository;
+        this.guideSectionAssembler = guideSectionAssembler;
         this.reportTextCipher = reportTextCipher;
         this.cursorCodec = cursorCodec;
     }
@@ -203,21 +220,93 @@ public class SkinRecordService {
                         Collectors.mapping(CareResultItem::getContentSnapshot, Collectors.toList())
                 ));
 
+        List<String> doToday = items.getOrDefault(CareResultItemType.DO_TODAY, List.of());
+        List<String> avoidToday = items.getOrDefault(CareResultItemType.AVOID_TODAY, List.of());
+        List<String> checkNext = items.getOrDefault(CareResultItemType.CHECK_NEXT, List.of());
+        SimilarExperienceResponse similarExperience = toSimilarExperience(careResult, userId);
+
+        // 명세가 CLINICIAN_CHECK 에 두 필드 모두 maxItems 0 을 걸어 두었다. 보고 생성 응답과
+        // 같은 판단을 여기서도 한다. 같은 보고인데 경로에 따라 화면이 달라지면 안 된다.
+        boolean clinicianCheck = careResult.getResultType() == ResultType.CLINICIAN_CHECK;
+
+        List<RecommendedIngredientResponse> recommendedIngredients = clinicianCheck
+                ? List.of()
+                : storedIngredients(careResult.getId(), appliedRuleData.ruleCodes());
+
+        List<GuideSectionResponse> guideSections = clinicianCheck
+                ? List.of()
+                : guideSectionAssembler.assemble(new GuideSectionAssembler.GuideSectionContent(
+                        careResult.getSummary(),
+                        doToday,
+                        avoidToday,
+                        checkNext,
+                        recommendedIngredients,
+                        similarExperience != null
+                ));
+
         return CareResultResponse.of(
                 careResult.getResultType(),
                 appliedRuleData.ruleCodes(),
+                guideSections,
                 appliedRuleData.ruleSetVersion(),
                 careResult.getSummary(),
-                items.getOrDefault(CareResultItemType.DO_TODAY, List.of()),
-                items.getOrDefault(CareResultItemType.AVOID_TODAY, List.of()),
-                items.getOrDefault(CareResultItemType.CHECK_NEXT, List.of()),
+                doToday,
+                avoidToday,
+                checkNext,
+                recommendedIngredients,
                 appliedRuleData.reasonTags(),
                 careResult.getClinicianMessage(),
-                toSimilarExperience(careResult, userId),
+                similarExperience,
                 careResult.getAiGenerationStatus(),
                 careResult.getGeneratedAt().atOffset(ZoneOffset.UTC),
                 careResult.isRetryUsed()
         );
+    }
+
+    /**
+     * 저장해 둔 추천 성분 스냅샷.
+     *
+     * <p>결과를 만들 때 복사해 둔 값을 그대로 읽는다. 성분 사전이 나중에 바뀌어도 과거 기록에
+     * 안내한 내용이 달라지지 않게 하려고 스냅샷을 남긴 것이라, 여기서 사전을 다시 읽으면 그
+     * 목적이 사라진다.
+     *
+     * <p>근거 규칙이 적용 규칙 밖을 가리키면 그 성분을 뺀다. 보고 생성 쪽과 같은 판단이다.
+     * 명세가 sourceRuleIds 에 minItems 1 을 요구해서 빈 배열로 둘 수 없다.
+     */
+    private List<RecommendedIngredientResponse> storedIngredients(UUID careResultId, List<String> matchedRuleIds) {
+        List<CareResultIngredient> stored = careResultIngredientRepository
+                .findAllByCareResultIdOrderByDisplayOrderAsc(careResultId);
+        if (stored.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, List<String>> ruleCodesByIngredient = careResultIngredientRuleRepository
+                .findAllByIdCareResultIngredientIdIn(stored.stream().map(CareResultIngredient::getId).toList())
+                .stream()
+                .sorted(Comparator.comparingInt(CareResultIngredientRule::getDisplayOrder))
+                .collect(Collectors.groupingBy(
+                        CareResultIngredientRule::careResultIngredientId,
+                        LinkedHashMap::new,
+                        Collectors.mapping(CareResultIngredientRule::ruleCode, Collectors.toList())
+                ));
+
+        List<RecommendedIngredientResponse> responses = new ArrayList<>();
+        for (CareResultIngredient ingredient : stored) {
+            List<String> sourceRuleIds = ruleCodesByIngredient.getOrDefault(ingredient.getId(), List.of()).stream()
+                    .filter(matchedRuleIds::contains)
+                    .toList();
+            if (sourceRuleIds.isEmpty()) {
+                continue;
+            }
+            responses.add(RecommendedIngredientResponse.of(
+                    ingredient.getIngredientCode(),
+                    ingredient.getNameSnapshot(),
+                    ingredient.getDescriptionSnapshot(),
+                    ingredient.getCautionNoteSnapshot(),
+                    sourceRuleIds
+            ));
+        }
+        return List.copyOf(responses);
     }
 
     private AppliedRuleData resolveAppliedRules(CareResult careResult, List<CareResultRule> appliedRules) {

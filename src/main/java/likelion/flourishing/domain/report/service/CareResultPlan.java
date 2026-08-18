@@ -14,6 +14,7 @@ import likelion.flourishing.domain.report.rule.CareRuleSnapshot;
  * 짧은 트랜잭션에서 한다.
  *
  * @param clinicianMessage 의료진 확인 결과에서만 값이 있다.
+ * @param ingredients 추천 성분. 명세가 CLINICIAN_CHECK 에는 maxItems 0 을 걸어 두어 그때는 비어 있다.
  */
 public record CareResultPlan(
         UUID ruleSetId,
@@ -23,11 +24,13 @@ public record CareResultPlan(
         String summary,
         String clinicianMessage,
         List<CareRuleSnapshot> matchedRules,
-        List<PlannedCareItem> items
+        List<PlannedCareItem> items,
+        List<PlannedIngredient> ingredients
 ) {
 
     public CareResultPlan {
         matchedRules = List.copyOf(matchedRules);
         items = List.copyOf(items);
+        ingredients = List.copyOf(ingredients);
     }
 }

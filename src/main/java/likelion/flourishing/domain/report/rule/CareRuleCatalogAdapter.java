@@ -1,6 +1,7 @@
 package likelion.flourishing.domain.report.rule;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -18,6 +19,10 @@ import likelion.flourishing.domain.report.entity.RuleSet;
 import likelion.flourishing.domain.report.entity.RuleSetStatus;
 import likelion.flourishing.domain.report.repository.CareRuleRepository;
 import likelion.flourishing.domain.report.repository.CareRuleVersionRepository;
+import likelion.flourishing.domain.report.entity.CareIngredient;
+import likelion.flourishing.domain.report.entity.RuleVersionIngredient;
+import likelion.flourishing.domain.report.repository.CareIngredientRepository;
+import likelion.flourishing.domain.report.repository.RuleVersionIngredientRepository;
 import likelion.flourishing.domain.report.repository.RuleActionRepository;
 import likelion.flourishing.domain.report.repository.RuleConditionRepository;
 import likelion.flourishing.domain.report.repository.RuleSetRepository;
@@ -43,19 +48,25 @@ public class CareRuleCatalogAdapter implements CareRuleCatalogPort {
     private final CareRuleRepository careRuleRepository;
     private final RuleConditionRepository ruleConditionRepository;
     private final RuleActionRepository ruleActionRepository;
+    private final RuleVersionIngredientRepository ruleVersionIngredientRepository;
+    private final CareIngredientRepository careIngredientRepository;
 
     public CareRuleCatalogAdapter(
             RuleSetRepository ruleSetRepository,
             CareRuleVersionRepository careRuleVersionRepository,
             CareRuleRepository careRuleRepository,
             RuleConditionRepository ruleConditionRepository,
-            RuleActionRepository ruleActionRepository
+            RuleActionRepository ruleActionRepository,
+            RuleVersionIngredientRepository ruleVersionIngredientRepository,
+            CareIngredientRepository careIngredientRepository
     ) {
         this.ruleSetRepository = ruleSetRepository;
         this.careRuleVersionRepository = careRuleVersionRepository;
         this.careRuleRepository = careRuleRepository;
         this.ruleConditionRepository = ruleConditionRepository;
         this.ruleActionRepository = ruleActionRepository;
+        this.ruleVersionIngredientRepository = ruleVersionIngredientRepository;
+        this.careIngredientRepository = careIngredientRepository;
     }
 
     @Override
@@ -85,7 +96,9 @@ public class CareRuleCatalogAdapter implements CareRuleCatalogPort {
                 .findAllByRuleVersionIdInAndActiveTrue(versionIds).stream()
                 .collect(Collectors.groupingBy(RuleAction::getRuleVersionId));
 
-        List<CareRuleSnapshot> snapshots = toSnapshots(versions, rules, conditions, actions);
+        Map<UUID, List<IngredientSnapshot>> ingredients = loadIngredients(versionIds);
+
+        List<CareRuleSnapshot> snapshots = toSnapshots(versions, rules, conditions, actions, ingredients);
         return Optional.of(new ActiveRuleCatalog(ruleSet.getId(), ruleSet.getVersionCode(), snapshots));
     }
 
@@ -118,15 +131,55 @@ public class CareRuleCatalogAdapter implements CareRuleCatalogPort {
         List<CareRuleVersion> ordered = ruleVersionIds.stream().map(versionsById::get).toList();
         return Optional.of(new AppliedRuleSet(
                 ruleSet.get().getVersionCode(),
-                toSnapshots(ordered, rules, Map.of(), actions)
+                toSnapshots(ordered, rules, Map.of(), actions, loadIngredients(ruleVersionIds))
         ));
+    }
+
+    /**
+     * 규칙 버전별 추천 성분.
+     *
+     * <p>내려 둔 성분(active = false)은 읽지 않는다. 규칙이 가리키고 있어도 결과에 담기지
+     * 않아야 하고, 여기서 거르면 아래 단계가 활성 여부를 다시 볼 필요가 없다.
+     */
+    private Map<UUID, List<IngredientSnapshot>> loadIngredients(List<UUID> versionIds) {
+        List<RuleVersionIngredient> links = ruleVersionIngredientRepository
+                .findAllByIdRuleVersionIdIn(versionIds);
+        if (links.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, CareIngredient> ingredientsById = careIngredientRepository
+                .findAllByIdInAndActiveTrue(links.stream().map(RuleVersionIngredient::ingredientId).distinct().toList())
+                .stream()
+                .collect(Collectors.toMap(CareIngredient::getId, Function.identity()));
+
+        Map<UUID, List<IngredientSnapshot>> byVersion = new LinkedHashMap<>();
+        links.stream()
+                .sorted(Comparator.comparingInt(RuleVersionIngredient::getDisplayOrder))
+                .forEach(link -> {
+                    CareIngredient ingredient = ingredientsById.get(link.ingredientId());
+                    if (ingredient == null) {
+                        return;
+                    }
+                    byVersion.computeIfAbsent(link.ruleVersionId(), key -> new ArrayList<>())
+                            .add(new IngredientSnapshot(
+                                    ingredient.getId(),
+                                    ingredient.getIngredientCode(),
+                                    ingredient.getName(),
+                                    ingredient.getDescription(),
+                                    ingredient.getCautionNote(),
+                                    link.getDisplayOrder()
+                            ));
+                });
+        return byVersion;
     }
 
     private List<CareRuleSnapshot> toSnapshots(
             List<CareRuleVersion> versions,
             Map<UUID, CareRule> rules,
             Map<UUID, List<RuleCondition>> conditions,
-            Map<UUID, List<RuleAction>> actions
+            Map<UUID, List<RuleAction>> actions,
+            Map<UUID, List<IngredientSnapshot>> ingredients
     ) {
         List<CareRuleSnapshot> snapshots = new ArrayList<>();
         for (CareRuleVersion version : versions) {
@@ -146,7 +199,8 @@ public class CareRuleCatalogAdapter implements CareRuleCatalogPort {
                     version.getFallbackText(),
                     splitForbiddenExpressions(version.getForbiddenExpressions()),
                     toConditionSpecs(conditions.getOrDefault(version.getId(), List.of())),
-                    toActionSnapshots(actions.getOrDefault(version.getId(), List.of()))
+                    toActionSnapshots(actions.getOrDefault(version.getId(), List.of())),
+                    ingredients.getOrDefault(version.getId(), List.of())
             ));
         }
         return snapshots;

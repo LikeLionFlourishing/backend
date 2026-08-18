@@ -7,11 +7,22 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRepository;
+import likelion.flourishing.domain.report.repository.CareResultIngredientRuleRepository;
+import likelion.flourishing.domain.report.service.GuideSectionFixtures;
+import likelion.flourishing.domain.report.entity.CareResultIngredient;
+import likelion.flourishing.domain.report.entity.CareResultIngredientRule;
+import likelion.flourishing.domain.report.entity.GuideSectionKey;
+import likelion.flourishing.domain.report.entity.CareRule;
+import likelion.flourishing.domain.report.entity.CareRuleVersion;
+import likelion.flourishing.domain.report.entity.CareResultRule;
+import likelion.flourishing.domain.report.entity.MatchReason;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -77,6 +88,8 @@ class SkinRecordServiceTest {
     @Mock private CareRuleRepository careRuleRepository;
     @Mock private RuleSetRepository ruleSetRepository;
     @Mock private FollowUpRepository followUpRepository;
+    @Mock private CareResultIngredientRepository careResultIngredientRepository;
+    @Mock private CareResultIngredientRuleRepository careResultIngredientRuleRepository;
     @Mock private ReportTextCipher reportTextCipher;
     @Mock private SkinReportCursorCodec cursorCodec;
 
@@ -93,6 +106,9 @@ class SkinRecordServiceTest {
                 careRuleRepository,
                 ruleSetRepository,
                 followUpRepository,
+                careResultIngredientRepository,
+                careResultIngredientRuleRepository,
+                GuideSectionFixtures.assembler(),
                 reportTextCipher,
                 cursorCodec
         );
@@ -243,6 +259,111 @@ class SkinRecordServiceTest {
         assertThat(response.getCareResult().getDoToday()).containsExactly("미지근한 물로 씻기");
         assertThat(response.getFollowUp().getSkinChange()).isEqualTo(SkinChange.IMPROVED);
         assertThat(response.getSkinChange()).isEqualTo(SkinChange.IMPROVED);
+    }
+
+    /**
+     * 명세 SkinReportDetail.careResult가 CareResult를 그대로 참조하므로, 상세 조회도 보고 생성과
+     * 같은 필드를 내보내야 한다. 같은 보고인데 경로에 따라 화면이 달라지면 안 된다.
+     */
+    @Test
+    void detailCarriesGuideSectionsAndStoredIngredients() {
+        stubCompletedDetail();
+        UUID storedId = UUID.fromString("0198a31f-f33f-7000-8000-0000000000f1");
+        CareResultIngredient stored = org.mockito.Mockito.mock(CareResultIngredient.class);
+        when(stored.getId()).thenReturn(storedId);
+        when(stored.getIngredientCode()).thenReturn("ING_PANTHENOL");
+        when(stored.getNameSnapshot()).thenReturn("판테놀");
+        when(stored.getDescriptionSnapshot()).thenReturn("진정에 쓰이는 성분입니다.");
+        when(stored.getCautionNoteSnapshot()).thenReturn(null);
+        when(careResultIngredientRepository.findAllByCareResultIdOrderByDisplayOrderAsc(CARE_RESULT_ID))
+                .thenReturn(List.of(stored));
+        when(careResultIngredientRuleRepository.findAllByIdCareResultIngredientIdIn(anyList()))
+                .thenReturn(List.of(CareResultIngredientRule.of(storedId, "GEN-001", 1)));
+
+        SkinReportDetailResponse response = skinRecordService.getRecord(principal(), FIRST_ID);
+
+        assertThat(response.getCareResult().getGuideSections()).hasSize(GuideSectionKey.SECTION_COUNT);
+        assertThat(response.getCareResult().getRecommendedIngredients())
+                .singleElement()
+                .satisfies(ingredient -> {
+                    assertThat(ingredient.getId()).isEqualTo("ING_PANTHENOL");
+                    assertThat(ingredient.getSourceRuleIds()).containsExactly("GEN-001");
+                });
+    }
+
+    /** 저장된 성분이 없으면 빈 배열이고 해당 섹션이 비었다고 표시된다. */
+    @Test
+    void detailWithoutStoredIngredientsStillCarriesSixSections() {
+        stubCompletedDetail();
+
+        SkinReportDetailResponse response = skinRecordService.getRecord(principal(), FIRST_ID);
+
+        assertThat(response.getCareResult().getRecommendedIngredients()).isEmpty();
+        assertThat(response.getCareResult().getGuideSections()).hasSize(GuideSectionKey.SECTION_COUNT);
+        assertThat(response.getCareResult().getGuideSections())
+                .filteredOn(section -> section.getKey() == GuideSectionKey.RECOMMENDED_INGREDIENTS)
+                .singleElement()
+                .satisfies(section -> assertThat(section.isEmpty()).isTrue());
+    }
+
+    /**
+     * 근거 규칙이 적용 규칙 밖을 가리키면 그 성분을 뺀다. 보고 생성 쪽과 같은 판단이다.
+     * 근거 없는 성분 추천은 내보내지 않는다.
+     */
+    @Test
+    void detailDropsIngredientWhoseSourceRuleIsNotApplied() {
+        stubCompletedDetail();
+        UUID storedId = UUID.fromString("0198a31f-f33f-7000-8000-0000000000f2");
+        CareResultIngredient stored = org.mockito.Mockito.mock(CareResultIngredient.class);
+        when(stored.getId()).thenReturn(storedId);
+        when(stored.getIngredientCode()).thenReturn("ING_GHOST");
+        when(stored.getNameSnapshot()).thenReturn("정체불명");
+        when(stored.getDescriptionSnapshot()).thenReturn("설명");
+        when(careResultIngredientRepository.findAllByCareResultIdOrderByDisplayOrderAsc(CARE_RESULT_ID))
+                .thenReturn(List.of(stored));
+        when(careResultIngredientRuleRepository.findAllByIdCareResultIngredientIdIn(anyList()))
+                .thenReturn(List.of(CareResultIngredientRule.of(storedId, "NOT-APPLIED-999", 1)));
+
+        SkinReportDetailResponse response = skinRecordService.getRecord(principal(), FIRST_ID);
+
+        assertThat(response.getCareResult().getRecommendedIngredients()).isEmpty();
+    }
+
+    /** 위 세 테스트가 함께 쓰는 상세 조회 스텁. */
+    private void stubCompletedDetail() {
+        SkinReport report = detailReport();
+        CareResult careResult = careResult();
+        FollowUp followUp = followUp();
+        RuleSet ruleSet = org.mockito.Mockito.mock(RuleSet.class);
+        when(ruleSet.getVersionCode()).thenReturn("2026-08-09-v1");
+
+        when(skinReportRepository.findByIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(report));
+        when(careResultRepository.findByReportIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(careResult));
+        when(followUpRepository.findByReportIdAndUserId(FIRST_ID, USER_ID)).thenReturn(Optional.of(followUp));
+        // 성분의 근거 규칙(sourceRuleIds)이 적용 규칙 안에 있어야 응답에 남는다.
+        UUID versionId = UUID.fromString("0198a31f-f33f-7000-8000-0000000000c1");
+        UUID ruleId = UUID.fromString("0198a31f-f33f-7000-8000-0000000000c0");
+        CareRuleVersion version = org.mockito.Mockito.mock(CareRuleVersion.class);
+        when(version.getId()).thenReturn(versionId);
+        when(version.getRuleSetId()).thenReturn(RULE_SET_ID);
+        when(version.getRuleId()).thenReturn(ruleId);
+        CareRule rule = org.mockito.Mockito.mock(CareRule.class);
+        when(rule.getId()).thenReturn(ruleId);
+        when(rule.getRuleCode()).thenReturn("GEN-001");
+        List<CareResultRule> applied = List.of(
+                CareResultRule.of(CARE_RESULT_ID, versionId, 1, MatchReason.COMMON)
+        );
+        when(careResultRuleRepository.findAllByIdCareResultIdOrderByApplicationOrder(CARE_RESULT_ID))
+                .thenReturn(applied);
+        when(careRuleVersionRepository.findAllById(List.of(versionId))).thenReturn(List.of(version));
+        when(careRuleRepository.findAllById(List.of(ruleId))).thenReturn(List.of(rule));
+        when(ruleSetRepository.findById(RULE_SET_ID)).thenReturn(Optional.of(ruleSet));
+        // careItem()이 안에서 스텁을 만들므로 thenReturn 인자 안에서 부르면 중첩 스터빙이 된다.
+        List<CareResultItem> careItems = List.of(careItem(CareResultItemType.DO_TODAY, "미지근한 물로 씻기", 1));
+        when(careResultItemRepository.findAllByCareResultIdOrderByItemTypeAscDisplayOrderAsc(CARE_RESULT_ID))
+                .thenReturn(careItems);
+        when(reportTextCipher.decrypt(report.getRawTextEncrypted())).thenReturn("오른쪽 턱이 빨갛고 따가워요.");
+        when(reportTextCipher.decrypt(report.getOtherAreasNoteEncrypted())).thenReturn(null);
     }
 
     private SkinReport summaryReport(UUID id, LocalDateTime createdAt) {
