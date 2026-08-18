@@ -51,6 +51,12 @@ public enum ErrorCode {
             "삭제 확인 필요",
             "계정 삭제를 확인하는 헤더가 올바르지 않습니다."
     ),
+    CONSENT_VERSION_NOT_ACCEPTED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "CONSENT_VERSION_NOT_ACCEPTED",
+            "동의서 버전 불일치",
+            "현재 받고 있는 동의서 버전이 아닙니다. 최신 동의 화면에서 다시 진행해 주세요."
+    ),
     CHECK_IN_DATE_NOT_TODAY(
             HttpStatus.UNPROCESSABLE_ENTITY,
             "CHECK_IN_DATE_NOT_TODAY",

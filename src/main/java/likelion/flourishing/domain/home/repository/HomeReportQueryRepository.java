@@ -35,6 +35,11 @@ public class HomeReportQueryRepository {
      *
      * <p>입력 기한이 지난 건은 제외한다. 기한이 지나면 보고 상태가 EXPIRED로 정리되지만,
      * 정리 시점과 조회 시점이 어긋날 수 있어 만료 시각으로 한 번 더 거른다.
+     *
+     * <p><b>아직 입력할 수 없는 건은 일부러 포함한다.</b> follow_up_available_at 조건을 넣지 않은 것은
+     * 빠뜨린 것이 아니라, 명세 PendingFollowUp이 availableFrom을 필수로 담아 "언제부터 쓸 수 있는지"를
+     * 사전 안내하게 하려는 것이다. 대신 홈의 priority는 지금 열 수 있는 건만 FOLLOW_UP으로 고른다
+     * (HomeService.getHome 참고). 이 조건을 추가하면 사전 안내 카드가 사라진다.
      */
     public Optional<PendingFollowUpRow> findOldestPendingFollowUp(UUID userId, LocalDateTime now) {
         Query query = entityManager.createNativeQuery("""
