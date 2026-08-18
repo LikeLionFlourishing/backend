@@ -85,7 +85,7 @@ class SecurityFilterChainTest {
                                   "events": [
                                     {
                                       "eventId": "0198a31f-f33f-7000-8000-000000000001",
-                                      "eventName": "REPORT_STARTED",
+                                      "name": "REPORT_STARTED",
                                       "occurredAt": "2026-08-15T03:00:00Z"
                                     }
                                   ]

@@ -928,7 +928,9 @@ CREATE TABLE analytics_events (
                 'REPORT_SUBMITTED',
                 'CARE_RESULT_VIEWED',
                 'FOLLOW_UP_SUBMITTED',
-                'SIMILAR_EXPERIENCE_VIEWED'
+                'SIMILAR_EXPERIENCE_VIEWED',
+                'RECOMMENDED_INGREDIENTS_VIEWED',
+                'NOTIFICATION_TIME_SET'
             )
         ),
     CONSTRAINT ck_analytics_events_properties_object

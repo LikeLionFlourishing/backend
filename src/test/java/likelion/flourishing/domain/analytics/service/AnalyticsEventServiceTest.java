@@ -3,6 +3,7 @@ package likelion.flourishing.domain.analytics.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,7 +52,9 @@ class AnalyticsEventServiceTest {
                 1_500L,
                 true,
                 "SELF_CARE_GUIDE",
-                true
+                true,
+                null,
+                null
         );
         AnalyticsEventRequest event = new AnalyticsEventRequest(
                 EVENT_ID,
@@ -60,9 +63,9 @@ class AnalyticsEventServiceTest {
                 OffsetDateTime.parse("2026-08-15T12:10:00+09:00")
         );
 
-        int acceptedCount = analyticsEventService.collect(principal(), new AnalyticsEventBatchRequest(List.of(event)));
+        int accepted = analyticsEventService.collect(principal(), new AnalyticsEventBatchRequest(List.of(event)));
 
-        assertThat(acceptedCount).isEqualTo(1);
+        assertThat(accepted).isEqualTo(1);
         verify(analyticsEventRepository).insertIdempotently(
                 EVENT_ID,
                 USER_ID,
@@ -133,6 +136,146 @@ class AnalyticsEventServiceTest {
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any()
         );
+    }
+
+    @Test
+    void countsOneEventWhenBatchRepeatsTheSameEventId() {
+        AnalyticsEventRequest first = new AnalyticsEventRequest(
+                EVENT_ID,
+                "REPORT_STARTED",
+                null,
+                OffsetDateTime.parse("2026-08-15T03:00:00Z")
+        );
+        AnalyticsEventRequest duplicate = new AnalyticsEventRequest(
+                EVENT_ID,
+                "REPORT_SUBMITTED",
+                null,
+                OffsetDateTime.parse("2026-08-15T03:00:01Z")
+        );
+
+        int accepted = analyticsEventService.collect(
+                principal(),
+                new AnalyticsEventBatchRequest(List.of(first, duplicate))
+        );
+
+        // 같은 eventId라 행은 하나만 생긴다. 응답도 그 사실과 맞아야 한다.
+        assertThat(accepted).isEqualTo(1);
+        verify(analyticsEventRepository, times(1)).insertIdempotently(
+                org.mockito.ArgumentMatchers.eq(EVENT_ID),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq("REPORT_STARTED"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
+    void rejectsOccurredAtFarInTheFutureInsteadOfFailingAtJdbc() {
+        // MySQL DATETIME 범위를 넘는 값은 OffsetDateTime 파싱은 통과하고 저장에서 터진다.
+        AnalyticsEventRequest event = new AnalyticsEventRequest(
+                EVENT_ID,
+                "REPORT_STARTED",
+                null,
+                OffsetDateTime.parse("+10000-01-01T00:00:00Z")
+        );
+
+        assertThatThrownBy(() -> analyticsEventService.collect(
+                principal(),
+                new AnalyticsEventBatchRequest(List.of(event))
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+
+        verify(analyticsEventRepository, never()).insertIdempotently(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
+    void rejectsOccurredAtOlderThanTheBackfillWindow() {
+        AnalyticsEventRequest event = new AnalyticsEventRequest(
+                EVENT_ID,
+                "REPORT_STARTED",
+                null,
+                OffsetDateTime.parse("2026-07-01T03:00:00Z")
+        );
+
+        assertThatThrownBy(() -> analyticsEventService.collect(
+                principal(),
+                new AnalyticsEventBatchRequest(List.of(event))
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    @Test
+    void acceptsOccurredAtWithinTheClockSkewAllowance() {
+        AnalyticsEventRequest event = new AnalyticsEventRequest(
+                EVENT_ID,
+                "REPORT_STARTED",
+                null,
+                OffsetDateTime.parse("2026-08-15T05:00:00Z")
+        );
+
+        assertThat(analyticsEventService.collect(
+                principal(),
+                new AnalyticsEventBatchRequest(List.of(event))
+        )).isEqualTo(1);
+    }
+
+    @Test
+    void storesEventNamesAndPropertiesAddedInSpecV2() {
+        AnalyticsEventPropertiesRequest properties =
+                new AnalyticsEventPropertiesRequest(null, null, null, null, 3, true);
+        AnalyticsEventRequest ingredients = new AnalyticsEventRequest(
+                EVENT_ID,
+                "RECOMMENDED_INGREDIENTS_VIEWED",
+                properties,
+                OffsetDateTime.parse("2026-08-15T03:00:00Z")
+        );
+
+        int accepted = analyticsEventService.collect(
+                principal(),
+                new AnalyticsEventBatchRequest(List.of(ingredients))
+        );
+
+        assertThat(accepted).isEqualTo(1);
+        verify(analyticsEventRepository).insertIdempotently(
+                EVENT_ID,
+                USER_ID,
+                "RECOMMENDED_INGREDIENTS_VIEWED",
+                "{\"ingredientCount\":3,\"usedDefaultTime\":true}",
+                LocalDateTime.of(2026, 8, 15, 3, 0),
+                RECEIVED_AT
+        );
+    }
+
+    @Test
+    void rejectsIngredientCountAboveTheDeclaredMaximum() {
+        AnalyticsEventPropertiesRequest properties =
+                new AnalyticsEventPropertiesRequest(null, null, null, null, 4, null);
+        AnalyticsEventRequest event = new AnalyticsEventRequest(
+                EVENT_ID,
+                "RECOMMENDED_INGREDIENTS_VIEWED",
+                properties,
+                OffsetDateTime.parse("2026-08-15T03:00:00Z")
+        );
+
+        assertThatThrownBy(() -> analyticsEventService.collect(
+                principal(),
+                new AnalyticsEventBatchRequest(List.of(event))
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting(exception -> ((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_ERROR);
     }
 
     private AuthenticatedUser principal() {

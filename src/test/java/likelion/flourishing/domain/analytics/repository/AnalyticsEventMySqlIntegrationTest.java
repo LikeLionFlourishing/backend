@@ -70,7 +70,7 @@ class AnalyticsEventMySqlIntegrationTest {
                 new AnalyticsEventRequest(
                         eventId,
                         "REPORT_SUBMITTED",
-                        new AnalyticsEventPropertiesRequest(18_000L, true, "SELF_CARE_GUIDE", true),
+                        new AnalyticsEventPropertiesRequest(18_000L, true, "SELF_CARE_GUIDE", true, null, null),
                         OffsetDateTime.parse("2026-08-15T12:00:18+09:00")
                 )
         ));

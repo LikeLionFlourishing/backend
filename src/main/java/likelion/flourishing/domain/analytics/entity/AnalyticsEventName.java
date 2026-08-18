@@ -1,6 +1,10 @@
 package likelion.flourishing.domain.analytics.entity;
 
-/** 분석용으로 저장할 수 있는 사용자 행동 이름. DDL의 허용 목록과 같은 값을 유지한다. */
+/**
+ * 분석용으로 저장할 수 있는 사용자 행동 이름. DDL의 허용 목록과 같은 값을 유지한다.
+ *
+ * <p>명세 v2_1에서 두 개가 늘었다. 추천 성분 섹션 조회와 온보딩 피부 점호 시각 설정 완료다.
+ */
 public enum AnalyticsEventName {
     ONBOARDING_COMPLETED,
     REPORT_STARTED,
@@ -10,10 +14,12 @@ public enum AnalyticsEventName {
     REPORT_SUBMITTED,
     CARE_RESULT_VIEWED,
     FOLLOW_UP_SUBMITTED,
-    SIMILAR_EXPERIENCE_VIEWED;
+    SIMILAR_EXPERIENCE_VIEWED,
+    RECOMMENDED_INGREDIENTS_VIEWED,
+    NOTIFICATION_TIME_SET;
 
     public static final String ALLOWED_PATTERN =
             "^(ONBOARDING_COMPLETED|REPORT_STARTED|INPUT_ASSIST_OPENED|AI_STRUCTURING_SUCCEEDED|"
                     + "AI_STRUCTURING_FAILED|REPORT_SUBMITTED|CARE_RESULT_VIEWED|FOLLOW_UP_SUBMITTED|"
-                    + "SIMILAR_EXPERIENCE_VIEWED)$";
+                    + "SIMILAR_EXPERIENCE_VIEWED|RECOMMENDED_INGREDIENTS_VIEWED|NOTIFICATION_TIME_SET)$";
 }

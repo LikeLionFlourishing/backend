@@ -31,7 +31,7 @@ public class AnalyticsEventController {
             @AuthenticationPrincipal AuthenticatedUser principal,
             @Valid @RequestBody AnalyticsEventBatchRequest request
     ) {
-        int acceptedCount = analyticsEventService.collect(principal, request);
-        return ResponseEntity.accepted().body(AnalyticsEventBatchResponse.of(acceptedCount));
+        int accepted = analyticsEventService.collect(principal, request);
+        return ResponseEntity.accepted().body(AnalyticsEventBatchResponse.of(accepted));
     }
 }

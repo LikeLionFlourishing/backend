@@ -14,7 +14,11 @@ import java.util.Set;
 import java.util.UUID;
 import likelion.flourishing.domain.analytics.entity.AnalyticsEventName;
 
-/** 측정 이벤트 한 건. eventId는 클라이언트 재전송을 멱등 처리하는 식별자다. */
+/**
+ * 측정 이벤트 한 건. eventId는 클라이언트 재전송을 멱등 처리하는 식별자다.
+ *
+ * <p>필드 이름은 명세 AnalyticsEventInput을 그대로 따른다. 이벤트 이름은 name이다.
+ */
 @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
 public class AnalyticsEventRequest {
 
@@ -23,7 +27,7 @@ public class AnalyticsEventRequest {
 
     @NotBlank
     @Pattern(regexp = AnalyticsEventName.ALLOWED_PATTERN, message = "허용되지 않은 이벤트 이름입니다.")
-    private String eventName;
+    private String name;
 
     @Valid
     private AnalyticsEventPropertiesRequest properties;
@@ -39,12 +43,12 @@ public class AnalyticsEventRequest {
 
     public AnalyticsEventRequest(
             UUID eventId,
-            String eventName,
+            String name,
             AnalyticsEventPropertiesRequest properties,
             OffsetDateTime occurredAt
     ) {
         this.eventId = eventId;
-        this.eventName = eventName;
+        this.name = name;
         this.properties = properties;
         this.occurredAt = occurredAt;
     }
@@ -53,8 +57,8 @@ public class AnalyticsEventRequest {
         return eventId;
     }
 
-    public String getEventName() {
-        return eventName;
+    public String getName() {
+        return name;
     }
 
     public AnalyticsEventPropertiesRequest getProperties() {

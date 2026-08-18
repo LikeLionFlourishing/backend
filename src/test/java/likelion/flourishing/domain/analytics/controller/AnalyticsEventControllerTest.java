@@ -58,12 +58,12 @@ class AnalyticsEventControllerTest {
                                   "events": [
                                     {
                                       "eventId": "0198a31f-f33f-7000-8000-000000000001",
-                                      "eventName": "REPORT_STARTED",
+                                      "name": "REPORT_STARTED",
                                       "occurredAt": "2026-08-15T12:00:00+09:00"
                                     },
                                     {
                                       "eventId": "0198a31f-f33f-7000-8000-000000000002",
-                                      "eventName": "REPORT_SUBMITTED",
+                                      "name": "REPORT_SUBMITTED",
                                       "properties": {
                                         "durationMs": 19000,
                                         "inputAssistUsed": true,
@@ -76,7 +76,7 @@ class AnalyticsEventControllerTest {
                                 }
                                 """))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.acceptedCount").value(2));
+                .andExpect(jsonPath("$.accepted").value(2));
     }
 
     @Test
@@ -124,7 +124,7 @@ class AnalyticsEventControllerTest {
                 .mapToObj(index -> """
                         {
                           "eventId": "%s",
-                          "eventName": "REPORT_STARTED",
+                          "name": "REPORT_STARTED",
                           "occurredAt": "2026-08-15T03:00:00Z"
                         }
                         """.formatted(new UUID(0, index)))
@@ -146,7 +146,7 @@ class AnalyticsEventControllerTest {
                   "events": [
                     {
                       "eventId": "0198a31f-f33f-7000-8000-000000000001",
-                      "eventName": "%s",
+                      "name": "%s",
                       %s
                       "occurredAt": "2026-08-15T03:00:00Z"
                     }
