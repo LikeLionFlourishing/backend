@@ -12,4 +12,16 @@ import java.util.UUID;
  * @param csrfToken 이 세션의 X-CSRF-Token 값
  */
 public record AuthenticatedUser(UUID userId, UUID sessionId, LocalDateTime expiresAt, String csrfToken) {
+
+    /**
+     * csrfToken을 지운 표기.
+     *
+     * <p>이 객체는 SecurityContext의 principal로 실리기 때문에 Security 디버그 로그나 principal을
+     * 찍는 코드가 한 번이라도 생기면 기본 record toString이 CSRF 토큰을 그대로 흘린다.
+     */
+    @Override
+    public String toString() {
+        return "AuthenticatedUser[userId=" + userId + ", sessionId=" + sessionId
+                + ", expiresAt=" + expiresAt + ", csrfToken=(redacted)]";
+    }
 }

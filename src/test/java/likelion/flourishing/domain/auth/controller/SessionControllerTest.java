@@ -2,6 +2,7 @@ package likelion.flourishing.domain.auth.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -119,6 +120,22 @@ class SessionControllerTest {
                 .andExpect(header().string("X-RateLimit-Remaining", "0"))
                 .andExpect(header().string("X-RateLimit-Reset", "1800000000"))
                 .andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"));
+    }
+
+    /**
+     * BCrypt가 72바이트까지만 읽으므로 가입에서 그 길이를 넘는 비밀번호를 막는다. 로그인도 같이
+     * 막지 않으면 잘려 읽힌 앞부분만 맞아도 통과하는 길이 남는다.
+     */
+    @Test
+    void loginRejectsPasswordOverBcryptByteLimit() throws Exception {
+        mockMvc.perform(post("/v1/sessions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"soldier@example.com\",\"password\":\"" + "a".repeat(73) + "\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors[0].field").value("password"));
+
+        verify(authService, never()).login(any(), anyString());
     }
 
     @Test
