@@ -48,7 +48,9 @@ app:
       # __Host- 접두사는 Secure와 Path=/를 요구한다. HTTP로 띄우는 로컬은 local 프로파일이 낮춘다.
       cookie-name: ${SESSION_COOKIE_NAME:__Host-session}
       secure: ${SESSION_COOKIE_SECURE:true}
-      same-site: Lax
+      # 프런트엔드가 다른 등록 도메인에 있으면 Lax 쿠키는 fetch에 실리지 않는다.
+      # 그 배포에서는 None으로 올린다(브라우저가 Secure를 함께 요구한다).
+      same-site: ${SESSION_COOKIE_SAME_SITE:Lax}
       ttl: 14d
     rate-limit:
       register:

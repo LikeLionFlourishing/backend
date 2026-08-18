@@ -27,6 +27,18 @@ public enum ErrorCode {
     ),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "접근 거부", "이 요청을 수행할 권한이 없습니다."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "리소스 없음", "요청한 리소스를 찾을 수 없습니다."),
+    METHOD_NOT_ALLOWED(
+            HttpStatus.METHOD_NOT_ALLOWED,
+            "METHOD_NOT_ALLOWED",
+            "허용되지 않은 메서드",
+            "이 경로에서 지원하지 않는 요청 방식입니다."
+    ),
+    UNSUPPORTED_MEDIA_TYPE(
+            HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+            "UNSUPPORTED_MEDIA_TYPE",
+            "지원하지 않는 형식",
+            "요청 본문 형식이 올바르지 않습니다. Content-Type을 확인해 주세요."
+    ),
     EMAIL_ALREADY_REGISTERED(
             HttpStatus.CONFLICT,
             "EMAIL_ALREADY_REGISTERED",
