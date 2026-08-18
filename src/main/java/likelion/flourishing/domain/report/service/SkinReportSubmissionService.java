@@ -13,8 +13,8 @@ import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.crypto.ReportTextCipher;
 import likelion.flourishing.domain.report.dto.request.ConfirmedSelectionsRequest;
 import likelion.flourishing.domain.report.dto.request.CreateSkinReportRequest;
-import likelion.flourishing.domain.report.dto.response.SkinReportCreatedResponse;
-import likelion.flourishing.domain.report.dto.response.StructuredSelectionsResponse;
+import likelion.flourishing.domain.record.dto.response.SkinReportDetailResponse;
+import likelion.flourishing.domain.record.service.SkinReportDetailAssembler;
 import likelion.flourishing.domain.report.entity.Appearance;
 import likelion.flourishing.domain.report.entity.PreCareCheck;
 import likelion.flourishing.domain.report.entity.ResultType;
@@ -201,29 +201,25 @@ public class SkinReportSubmissionService {
                 .orElseThrow(() -> conflict);
     }
 
-    private SkinReportCreatedResponse toResponse(
+    /**
+     * 생성 응답을 상세 조회와 같은 타입으로 만든다.
+     *
+     * <p>갓 만든 보고는 status 가 FOLLOW_UP_PENDING 이고 경과가 아직 없으므로 followUp 과
+     * skinChange 는 null 이다.
+     *
+     * <p>경과 입력 가능 시각과 만료 시각은 명세에 없어 담지 않는다. 같은 정보를
+     * GET /v1/home 의 pendingFollowUp 이 availableFrom·expiresAt 으로 이미 내려 준다.
+     */
+    private SkinReportDetailResponse toResponse(
             SkinReport report,
             CreateSkinReportRequest request,
             GeneratedCareResult generated,
             SimilarExperienceLookup lookup
     ) {
-        StructuredSelectionsResponse confirmed = StructuredSelectionsResponse.of(
-                report.getPrimaryArea(),
-                trimToNull(request.confirmed().otherAreasNote()),
-                sorted(report.getAppearances()),
-                sorted(report.getSensations()),
-                sorted(report.getSituations()),
-                report.getCareAvailability()
-        );
-
-        return SkinReportCreatedResponse.of(
-                report.getId(),
-                report.getReportDate(),
-                report.getResultType(),
-                report.getStatus(),
+        return SkinReportDetailAssembler.assemble(
+                report,
                 request.rawText(),
-                confirmed,
-                sorted(report.getPreCareChecks()),
+                trimToNull(request.confirmed().otherAreasNote()),
                 careGuideResponseAssembler.assemble(
                         generated.careResult(),
                         generated.ruleVersion(),
@@ -232,8 +228,8 @@ public class SkinReportSubmissionService {
                         generated.ingredients(),
                         lookup.found().map(FoundSimilarExperience::response).orElse(null)
                 ),
-                report.getFollowUpAvailableAt().atOffset(ZoneOffset.UTC),
-                report.getFollowUpExpiresAt().atOffset(ZoneOffset.UTC),
+                null,
+                null,
                 createdAtOf(report).atOffset(ZoneOffset.UTC)
         );
     }

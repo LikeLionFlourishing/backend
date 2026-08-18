@@ -26,7 +26,6 @@ import likelion.flourishing.domain.followup.repository.FollowUpRepository;
 import likelion.flourishing.domain.record.cursor.SkinReportCursor;
 import likelion.flourishing.domain.record.cursor.SkinReportCursorCodec;
 import likelion.flourishing.domain.record.dto.response.CareResultResponse;
-import likelion.flourishing.domain.record.dto.response.ConfirmedStructuredReportResponse;
 import likelion.flourishing.domain.record.dto.response.CursorPageResponse;
 import likelion.flourishing.domain.record.dto.response.SimilarExperienceResponse;
 import likelion.flourishing.domain.record.dto.response.SkinReportDetailResponse;
@@ -152,35 +151,13 @@ public class SkinRecordService {
         FollowUp followUp = followUpRepository.findByReportIdAndUserId(reportId, userId).orElse(null);
         assertFollowUpMatchesStatus(report, followUp);
 
-        List<likelion.flourishing.domain.report.entity.Appearance> appearances = sorted(report.getAppearances());
-        List<likelion.flourishing.domain.report.entity.Sensation> sensations = sorted(report.getSensations());
-        List<likelion.flourishing.domain.report.entity.Situation> situations = sorted(report.getSituations());
-        List<likelion.flourishing.domain.report.entity.PreCareCheck> preCareChecks =
-                sorted(report.getPreCareChecks());
-        FollowUpResponse followUpResponse = followUp == null ? null : FollowUpResponse.from(followUp);
-
-        return SkinReportDetailResponse.of(
-                report.getId(),
-                report.getReportDate(),
-                report.getPrimaryArea(),
-                appearances,
-                sensations,
-                situations,
-                report.getResultType(),
-                report.getStatus(),
-                followUp == null ? null : followUp.getSkinChange(),
+        return SkinReportDetailAssembler.assemble(
+                report,
                 reportTextCipher.decrypt(report.getRawTextEncrypted()),
-                ConfirmedStructuredReportResponse.of(
-                        report.getPrimaryArea(),
-                        reportTextCipher.decrypt(report.getOtherAreasNoteEncrypted()),
-                        appearances,
-                        sensations,
-                        situations,
-                        report.getCareAvailability()
-                ),
-                preCareChecks,
+                reportTextCipher.decrypt(report.getOtherAreasNoteEncrypted()),
                 toCareResult(careResult, userId),
-                followUpResponse,
+                followUp == null ? null : FollowUpResponse.from(followUp),
+                followUp == null ? null : followUp.getSkinChange(),
                 report.getCreatedAt().atOffset(ZoneOffset.UTC)
         );
     }

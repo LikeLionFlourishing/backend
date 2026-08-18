@@ -11,7 +11,7 @@ import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.dto.request.CreateSkinReportRequest;
 import likelion.flourishing.domain.record.dto.response.CareResultResponse;
-import likelion.flourishing.domain.report.dto.response.SkinReportCreatedResponse;
+import likelion.flourishing.domain.record.dto.response.SkinReportDetailResponse;
 import likelion.flourishing.domain.report.idempotency.IdempotentResponse;
 import likelion.flourishing.domain.report.service.CareGuideRegenerationService;
 import likelion.flourishing.domain.report.service.SkinReportSubmissionService;
@@ -57,7 +57,7 @@ public class SkinReportController {
     @Operation(summary = "피부 보고 생성")
     @ApiResponse(
             responseCode = "201",
-            content = @Content(schema = @Schema(implementation = SkinReportCreatedResponse.class))
+            content = @Content(schema = @Schema(implementation = SkinReportDetailResponse.class))
     )
     @PostMapping
     public ResponseEntity<String> create(

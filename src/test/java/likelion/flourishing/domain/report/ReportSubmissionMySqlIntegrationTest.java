@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import java.nio.file.Path;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -33,6 +35,7 @@ import likelion.flourishing.domain.report.entity.PreCareCheck;
 import likelion.flourishing.domain.report.entity.Sensation;
 import likelion.flourishing.domain.report.entity.Situation;
 import likelion.flourishing.domain.report.idempotency.IdempotentResponse;
+import likelion.flourishing.domain.record.service.SkinRecordService;
 import likelion.flourishing.domain.report.service.CareGuideRegenerationService;
 import likelion.flourishing.domain.report.service.SkinReportSubmissionService;
 import likelion.flourishing.global.exception.BusinessException;
@@ -116,6 +119,12 @@ class ReportSubmissionMySqlIntegrationTest {
     @Autowired
     private CareGuideRegenerationService regenerationService;
 
+    @Autowired
+    private SkinRecordService skinRecordService;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @MockitoBean
     private CareGuideNarrationPort narrationPort;
 
@@ -128,6 +137,50 @@ class ReportSubmissionMySqlIntegrationTest {
         insertUserWithConsent();
         insertRuleSet("ACTIVE");
         insertRules();
+    }
+
+    /**
+     * 생성 응답과 상세 조회 응답이 갈라지지 않는지 본다.
+     *
+     * <p>둘이 다른 타입이던 시절에 생성 응답에만 최상위 선택값과 followUp 이 없고 명세에 없는
+     * 두 시각이 붙어 있었다. 키 구성을 직접 비교해 같은 일이 다시 생기면 여기서 걸리게 한다.
+     */
+    @Test
+    void createdResponseHasTheSameShapeAsTheDetailView() throws Exception {
+        when(narrationPort.narrate(any())).thenReturn(NarrationOutcome.succeeded(
+                "붉은 자리를 진정시키는 데 집중해 주세요.",
+                List.of("찬 물수건으로 진정하기"),
+                List.of("손으로 만지지 않기"),
+                List.of("붉은 범위가 넓어졌는지 보기")
+        ));
+        UUID key = UUID.randomUUID();
+
+        IdempotentResponse response = submissionService.submit(principal(), key, selfCareRequest());
+
+        JsonNode created = objectMapper.readTree(response.jsonBody());
+        JsonNode detail = objectMapper.valueToTree(
+                skinRecordService.getRecord(principal(), response.resourceId())
+        );
+
+        assertThat(fieldNames(created)).isEqualTo(fieldNames(detail));
+        assertThat(fieldNames(created.get("careResult")))
+                .isEqualTo(fieldNames(detail.get("careResult")));
+
+        // 갓 만든 보고의 값
+        assertThat(created.get("status").asText()).isEqualTo("FOLLOW_UP_PENDING");
+        assertThat(created.get("followUp").isNull()).isTrue();
+        assertThat(created.get("skinChange").isNull()).isTrue();
+        assertThat(created.get("primaryArea").asText()).isEqualTo("RIGHT_CHIN");
+
+        // 명세에 없는 키는 나가지 않아야 한다.
+        assertThat(created.has("followUpAvailableAt")).isFalse();
+        assertThat(created.has("followUpExpiresAt")).isFalse();
+    }
+
+    private List<String> fieldNames(JsonNode node) {
+        List<String> names = new ArrayList<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names.stream().sorted().toList();
     }
 
     @Test
