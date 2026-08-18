@@ -50,6 +50,7 @@ import org.springframework.dao.DataIntegrityViolationException;
  *   <li>알림을 켜면 동의 2건(SENSITIVE_DATA, NOTIFICATION)을 남기는지
  *   <li>알림을 받지 않겠다고 하면 알림 동의 이력을 남기지 않고 기본 시각을 저장하는지
  *   <li>시간 피커에서 고른 값을 그대로 저장하는지
+ *   <li>알림을 껐는데 피커 값이 함께 오면 그 값을 버리고 기본 시각을 저장하는지
  *   <li>같은 버전으로 다시 부르면 최초 동의 시각을 유지하고 새 행을 만들지 않는지
  *   <li>알림 설정은 기존 행이 있으면 새로 만들지 않고 덮어쓰는지
  *   <li>알림 켜기 + 권한 거부 조합도 그대로 저장하는지
@@ -171,6 +172,27 @@ class OnboardingServiceTest {
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
         OnboardingResponse response = onboardingService.complete(principal(), skippedRequest());
+
+        ArgumentCaptor<NotificationSetting> captor = ArgumentCaptor.forClass(NotificationSetting.class);
+        verify(notificationSettingRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().getNotificationTime()).isEqualTo(NotificationSetting.DEFAULT_TIME);
+        assertThat(response.getNotificationTime()).isEqualTo(NotificationSetting.DEFAULT_TIME);
+    }
+
+    /**
+     * 알림을 껐는데 피커 값이 함께 온 요청도 기본 시각으로 저장한다.
+     *
+     * <p>스키마의 if/then은 {@code notificationEnabled: true} 갈래에만 걸려 있어 이 조합도
+     * 검증을 통과한다. 그대로 저장하면 알림을 끈 사용자의 경과 입력이 21:00에 열려
+     * "이때도 기본값 17:30으로 저장한다"는 명세 문장과 갈린다.
+     */
+    @Test
+    void completeIgnoresPickedTimeWhenNotificationDisabled() {
+        when(userConsentRepository.findByUserIdAndConsentTypeAndConsentVersion(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
+
+        OnboardingResponse response = onboardingService.complete(principal(), skippedRequestWithTime("21:00"));
 
         ArgumentCaptor<NotificationSetting> captor = ArgumentCaptor.forClass(NotificationSetting.class);
         verify(notificationSettingRepository).saveAndFlush(captor.capture());
@@ -368,5 +390,12 @@ class OnboardingServiceTest {
 
     private OnboardingRequest skippedRequest(NotificationPermission permission) {
         return new OnboardingRequest(CONSENT_VERSION, true, false, permission, null, null, null);
+    }
+
+    /** 알림을 끄면서 피커 값까지 보낸 요청. 스키마상 막히지 않아 클라이언트가 보낼 수 있다. */
+    private OnboardingRequest skippedRequestWithTime(String notificationTime) {
+        return new OnboardingRequest(
+                CONSENT_VERSION, true, false, NotificationPermission.DEFAULT, notificationTime, null, null
+        );
     }
 }

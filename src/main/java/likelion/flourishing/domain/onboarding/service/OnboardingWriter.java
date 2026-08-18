@@ -130,12 +130,20 @@ public class OnboardingWriter {
     }
 
     /**
-     * 알림을 받지 않겠다고 한 요청은 피커 값을 보내지 않는다. 그래도 기본 시각을 저장한다.
-     * 다음 날 경과 입력 가능 시점을 이 값으로 계산하기 때문에 알림을 끈 사용자에게도 필요하다.
+     * 저장할 알림 시각. 알림을 끈 요청은 피커 값을 함께 보냈더라도 기본 시각으로 저장한다.
+     *
+     * <p>다음 날 경과 입력 가능 시점을 이 값으로 계산하기 때문에 알림을 끈 사용자에게도 필요하다.
+     *
+     * <p>명세 {@code PUT /me/onboarding} 설명의 두 번째 갈래가 "알림을 받지 않을게요를 누른
+     * 경우에도 서버는 notificationTime을 기본값 17:30으로 저장한다"고 적고 있어 그대로 따른다.
+     * 스키마의 if/then은 {@code notificationEnabled: true} 갈래에만 걸려 있어
+     * {@code enabled=false} + {@code time="21:00"} 조합도 검증을 통과한다. 그 값을 그대로
+     * 저장하면 알림을 끈 사용자의 경과 입력이 21:00에 열려 명세와 갈리므로 여기서 떨어뜨린다.
      */
     private String notificationTimeOf(OnboardingRequest request) {
-        return request.notificationTime() == null
-                ? NotificationSetting.DEFAULT_TIME
-                : request.notificationTime();
+        if (!request.notificationEnabled() || request.notificationTime() == null) {
+            return NotificationSetting.DEFAULT_TIME;
+        }
+        return request.notificationTime();
     }
 }
