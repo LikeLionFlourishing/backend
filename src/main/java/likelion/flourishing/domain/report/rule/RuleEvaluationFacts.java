@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 import likelion.flourishing.domain.report.entity.Appearance;
 import likelion.flourishing.domain.report.entity.BodyArea;
 import likelion.flourishing.domain.report.entity.CareAvailability;
+import likelion.flourishing.domain.report.entity.ExpectedEnvironment;
 import likelion.flourishing.domain.report.entity.PreCareCheck;
 import likelion.flourishing.domain.report.entity.RuleConditionField;
 import likelion.flourishing.domain.report.entity.Sensation;
@@ -17,8 +18,11 @@ import likelion.flourishing.domain.report.entity.Situation;
  * <p>원문은 들어오지 않는다. 규칙은 문장이 아니라 선택값으로만 판단한다.
  *
  * @param completedHistory 완료된 과거 기록에서 뽑은 코드. 지금은 과거 보고의 겉모습 코드와
- *                         유사 경험을 찾았는지를 알리는 표시로 채운다. 어떤 코드를 조건으로 쓸지는
- *                         관리 규칙 최종본에서 확정된다.
+ *                         유사 경험을 찾았는지를 알리는 표시로 채운다.
+ * @param environments     온보딩에서 1회 설정하는 예상 환경. 확정 명세에 아직 입력 필드가 없어
+ *                         지금은 항상 비어 있고, 비어 있으면 ENV-* 규칙이 걸리지 않는다. 규칙
+ *                         문서가 예상 환경을 선택값으로 두고 미입력 시 환경 보정 없이 진행하도록
+ *                         정했으므로 빈 값도 정상이다.
  */
 public record RuleEvaluationFacts(
         BodyArea primaryArea,
@@ -27,7 +31,8 @@ public record RuleEvaluationFacts(
         Set<Situation> situations,
         CareAvailability careAvailability,
         Set<PreCareCheck> preCareChecks,
-        Set<String> completedHistory
+        Set<String> completedHistory,
+        Set<ExpectedEnvironment> environments
 ) {
 
     /** 유사 경험을 찾았을 때 completedHistory에 넣는 표시. */
@@ -39,6 +44,7 @@ public record RuleEvaluationFacts(
         situations = Set.copyOf(situations);
         preCareChecks = Set.copyOf(preCareChecks);
         completedHistory = Set.copyOf(completedHistory);
+        environments = Set.copyOf(environments);
     }
 
     /** 조건 필드에 해당하는 값을 코드 집합으로 돌려준다. 단일 값 필드는 원소 하나짜리 집합이다. */
@@ -51,6 +57,7 @@ public record RuleEvaluationFacts(
             case SITUATIONS -> names(situations);
             case PRE_CARE_CHECKS -> names(preCareChecks);
             case COMPLETED_HISTORY -> completedHistory;
+            case ENVIRONMENTS -> names(environments);
         };
     }
 

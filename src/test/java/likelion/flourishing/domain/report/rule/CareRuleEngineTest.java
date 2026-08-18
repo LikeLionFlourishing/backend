@@ -138,7 +138,8 @@ class CareRuleEngineTest {
                 Set.of(Situation.NONE_RECALLED),
                 CareAvailability.ALREADY_WASHED,
                 Set.of(PreCareCheck.NONE),
-                Set.of(RuleEvaluationFacts.SIMILAR_EXPERIENCE_FOUND)
+                Set.of(RuleEvaluationFacts.SIMILAR_EXPERIENCE_FOUND),
+                Set.of()
         );
 
         assertThat(engine.match(CareRuleFixtures.activeCatalog(rule), CareRuleFixtures.selfCareFacts()))
@@ -183,6 +184,7 @@ class CareRuleEngineTest {
                 Set.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED,
                 preCareChecks,
+                Set.of(),
                 Set.of()
         );
     }

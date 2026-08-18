@@ -101,6 +101,53 @@ public final class CareRuleFixtures {
                 List.of());
     }
 
+    /** 면도를 골랐을 때 걸리는 상황 규칙. */
+    public static CareRuleSnapshot situationRule() {
+        return new CareRuleSnapshot(
+                UUID.fromString("0198a31f-f33f-7000-8000-000000000131"),
+                UUID.fromString("0198a31f-f33f-7000-8000-000000000130"),
+                "SIT-001",
+                RuleCategory.SITUATION,
+                100,
+                "면도 후 피부 불편에 적용",
+                "면도한 부위는 오늘 쉬게 두는 편이 좋겠습니다.",
+                List.of(),
+                List.of(new RuleConditionSpec(
+                        1, RuleConditionField.SITUATIONS, RuleOperator.CONTAINS, Situation.SHAVING.name(), false
+                )),
+                List.of(
+                        action("0198a31f-f33f-7000-8000-000000000132", RuleActionType.DO_TODAY, "면도 부위 식히기", 100, 1),
+                        action("0198a31f-f33f-7000-8000-000000000133", RuleActionType.AVOID_TODAY, "같은 부위 반복 면도 피하기", 100, 1),
+                        action("0198a31f-f33f-7000-8000-000000000134", RuleActionType.CHECK_NEXT, "붉어짐 범위 보기", 100, 1)
+                ),
+                List.of());
+    }
+
+    /**
+     * 조건 없이 항상 후보에 오르는 폴백 규칙.
+     *
+     * <p>상황 규칙이 하나도 걸리지 않을 때만 단독으로 쓰인다. 성분은 붙이지 않는다. 원인을 특정
+     * 하지 못한 상태에서 성분을 권하지 않기로 정했기 때문이다.
+     */
+    public static CareRuleSnapshot fallbackRule() {
+        return new CareRuleSnapshot(
+                UUID.fromString("0198a31f-f33f-7000-8000-000000000141"),
+                UUID.fromString("0198a31f-f33f-7000-8000-000000000140"),
+                "FALLBACK-001",
+                RuleCategory.FALLBACK,
+                100,
+                "어떤 상황 규칙에도 걸리지 않을 때 단독으로 적용",
+                "기록에서 구체적인 자극 상황을 찾기 어려워 최소 관리 원칙을 안내합니다.",
+                List.of(),
+                List.of(),
+                List.of(
+                        action("0198a31f-f33f-7000-8000-000000000142", RuleActionType.DO_TODAY, "기본 로션 한 가지만 얇게 바르기", 100, 1),
+                        action("0198a31f-f33f-7000-8000-000000000143", RuleActionType.AVOID_TODAY, "쓰지 않던 제품 시도 피하기", 100, 1),
+                        action("0198a31f-f33f-7000-8000-000000000144", RuleActionType.CHECK_NEXT, "스스로 가라앉는지 보기", 100, 1)
+                ),
+                List.of());
+    }
+
     /** 허용 문구가 하나도 없는 규칙. 문구를 모두 끈 뒤의 상태를 재현한다. */
     public static CareRuleSnapshot ruleWithoutActions() {
         return new CareRuleSnapshot(
@@ -135,6 +182,7 @@ public final class CareRuleFixtures {
                 Set.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED,
                 Set.of(PreCareCheck.NONE),
+                Set.of(),
                 Set.of()
         );
     }
@@ -148,6 +196,7 @@ public final class CareRuleFixtures {
                 Set.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED,
                 Set.of(PreCareCheck.PUS_OOZING_BLISTER),
+                Set.of(),
                 Set.of()
         );
     }

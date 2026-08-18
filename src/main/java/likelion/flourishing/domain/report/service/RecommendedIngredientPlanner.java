@@ -25,14 +25,21 @@ public class RecommendedIngredientPlanner {
 
     private static final Logger log = LoggerFactory.getLogger(RecommendedIngredientPlanner.class);
 
-    /** 명세 CareResult.recommendedIngredients.maxItems. */
-    public static final int MAX_INGREDIENTS = 3;
+    /**
+     * 한 결과에 담을 성분 개수 상한.
+     *
+     * <p>관리규칙 v0.3의 ING 공통 호출 조건이 "최대 2개까지 출력"으로 정했다. 명세
+     * CareResult.recommendedIngredients.maxItems는 3이라 둘을 함께 만족한다. 규칙 쪽 상한이 더
+     * 좁은 이유는 참고 성분을 늘리는 것이 제품 추천처럼 읽히기 때문이다.
+     */
+    public static final int MAX_INGREDIENTS = 2;
 
     /**
-     * 걸린 규칙 순서대로 성분을 모아 최대 세 개까지 고른다.
+     * 걸린 규칙 순서대로 성분을 모아 상한까지 고른다.
      *
      * <p>규칙에 성분이 없으면 빈 목록이다. 명세가 "규칙에 해당 성분이 없으면 빈 배열"이라고
-     * 정하고 있어 오류가 아니다.
+     * 정하고 있어 오류가 아니다. 성분을 내보내지 않아야 하는 조건(새 제품 사용 후, 겉모습이
+     * 기타 단독, 의료진 확인, 폴백 단독)은 규칙 조건과 호출부에서 이미 걸러진다.
      */
     public List<PlannedIngredient> plan(List<CareRuleSnapshot> matchedRules) {
         Map<String, Candidate> byCode = new LinkedHashMap<>();
@@ -47,7 +54,7 @@ public class RecommendedIngredientPlanner {
         List<PlannedIngredient> planned = new ArrayList<>();
         for (Candidate candidate : byCode.values()) {
             if (planned.size() == MAX_INGREDIENTS) {
-                // 명세 상한을 넘으면 뒤엣것을 버린다. 규칙 우선순위가 앞선 성분이 남는다.
+                // 상한을 넘으면 뒤엣것을 버린다. 규칙 우선순위가 앞선 성분이 남는다.
                 log.debug(
                         "추천 성분이 상한을 넘어 일부를 제외했습니다. 상한={} 후보={}",
                         MAX_INGREDIENTS,

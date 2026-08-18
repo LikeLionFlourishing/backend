@@ -250,6 +250,80 @@ class CareResultGeneratorTest {
         assertThat(generated.careResult().getSimilarityScore()).isEqualTo(7);
     }
 
+    /**
+     * 상황 규칙이 하나도 걸리지 않으면 폴백만 단독으로 적용한다.
+     *
+     * <p>규칙 문서가 폴백을 다른 관리 규칙과 조합하지 않는 독립 규칙으로 정했다. 공통 규칙과
+     * 겉모습 규칙이 함께 걸렸어도 결과에는 폴백만 남는다.
+     */
+    @Test
+    void fallbackAppliesAloneWhenNoSituationRuleMatches() {
+        when(careRuleCatalogPort.loadActiveCatalog()).thenReturn(Optional.of(CareRuleFixtures.activeCatalog(
+                CareRuleFixtures.commonRule(),
+                CareRuleFixtures.rednessRule(),
+                CareRuleFixtures.fallbackRule()
+        )));
+
+        CareResultPlan plan = plan(ResultType.SELF_CARE_GUIDE);
+
+        assertThat(plan.matchedRules()).extracting(CareRuleSnapshot::ruleCode)
+                .containsExactly("FALLBACK-001");
+        assertThat(plan.summary())
+                .isEqualTo("기록에서 구체적인 자극 상황을 찾기 어려워 최소 관리 원칙을 안내합니다.");
+        assertThat(plan.aiGenerationStatus()).isEqualTo(AiGenerationStatus.FALLBACK);
+        assertThat(plan.ingredients()).isEmpty();
+        assertThat(plan.items()).extracting(PlannedCareItem::content)
+                .containsExactly("기본 로션 한 가지만 얇게 바르기", "쓰지 않던 제품 시도 피하기", "스스로 가라앉는지 보기");
+    }
+
+    /** 원인을 모르는 상태에서 요약을 새로 쓰게 하면 원인을 짐작한 문장이 나올 여지가 생긴다. */
+    @Test
+    void fallbackDoesNotCallTheModel() {
+        when(careRuleCatalogPort.loadActiveCatalog()).thenReturn(Optional.of(CareRuleFixtures.activeCatalog(
+                CareRuleFixtures.commonRule(),
+                CareRuleFixtures.fallbackRule()
+        )));
+        stubSuccessfulNarration();
+
+        plan(ResultType.SELF_CARE_GUIDE);
+
+        verify(narrationPort, never()).narrate(any());
+    }
+
+    /** 상황 규칙이 걸렸으면 폴백은 조합에서 빠진다. 폴백은 조건이 없어 항상 후보에 오른다. */
+    @Test
+    void matchedSituationRuleKeepsFallbackOutOfTheResult() {
+        when(careRuleCatalogPort.loadActiveCatalog()).thenReturn(Optional.of(CareRuleFixtures.activeCatalog(
+                CareRuleFixtures.commonRule(),
+                CareRuleFixtures.situationRule(),
+                CareRuleFixtures.fallbackRule()
+        )));
+        when(narrationPort.narrate(any()))
+                .thenReturn(NarrationOutcome.failed(AiFailureCode.AI_UNREACHABLE));
+
+        CareResultPlan plan = plan(ResultType.SELF_CARE_GUIDE);
+
+        assertThat(plan.matchedRules()).extracting(CareRuleSnapshot::ruleCode)
+                .containsExactly("SIT-001", "GEN-001")
+                .doesNotContain("FALLBACK-001");
+    }
+
+    /** 의료진 확인 안내에도 폴백을 섞지 않는다. 문서가 폴백의 제외 조건으로 안전 분기를 들었다. */
+    @Test
+    void clinicianCheckKeepsFallbackOutOfTheResult() {
+        when(careRuleCatalogPort.loadActiveCatalog()).thenReturn(Optional.of(CareRuleFixtures.activeCatalog(
+                CareRuleFixtures.commonRule(),
+                CareRuleFixtures.safetyRule(),
+                CareRuleFixtures.fallbackRule()
+        )));
+
+        CareResultPlan plan = plan(ResultType.CLINICIAN_CHECK);
+
+        assertThat(plan.matchedRules()).extracting(CareRuleSnapshot::ruleCode)
+                .doesNotContain("FALLBACK-001");
+        assertThat(plan.clinicianMessage()).isNotBlank();
+    }
+
     private void stubCatalog() {
         when(careRuleCatalogPort.loadActiveCatalog()).thenReturn(Optional.of(CareRuleFixtures.activeCatalog(
                 CareRuleFixtures.commonRule(),

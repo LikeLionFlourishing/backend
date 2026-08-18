@@ -141,7 +141,10 @@ public class SkinReportSubmissionService {
                 situations,
                 confirmed.careAvailability(),
                 preCareChecks,
-                lookup.completedHistory()
+                lookup.completedHistory(),
+                // 예상 환경은 온보딩에서 1회 받는 값이고 확정 명세에 아직 입력 필드가 없다.
+                // 비어 있으면 ENV-* 규칙이 걸리지 않고 환경 보정 없이 진행한다.
+                Set.of()
         ));
 
         SkinReport report = SkinReport.create(

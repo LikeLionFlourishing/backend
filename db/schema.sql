@@ -147,9 +147,17 @@ CREATE TABLE care_rules (
 
     CONSTRAINT pk_care_rules PRIMARY KEY (id),
     CONSTRAINT uq_care_rules_code UNIQUE (rule_code),
+    -- 관리규칙 v0.3의 9개 prefix에 대응한다.
+    -- CR=COMMON, ENV=ENVIRONMENT, SIT=SITUATION, APP=APPEARANCE, ST=CURRENT_STATE,
+    -- SAF=SAFETY, HR=HISTORY, ING=INGREDIENT, FALLBACK=FALLBACK
     CONSTRAINT ck_care_rules_category
-        CHECK (category IN ('COMMON', 'SITUATION', 'CURRENT_STATE', 'SAFETY', 'HISTORY')),
-    -- rule_code 형식(예: GEN-001)은 애플리케이션 입력 검증에서 강제한다.
+        CHECK (
+            category IN (
+                'COMMON', 'ENVIRONMENT', 'SITUATION', 'APPEARANCE', 'CURRENT_STATE',
+                'SAFETY', 'HISTORY', 'INGREDIENT', 'FALLBACK'
+            )
+        ),
+    -- rule_code 형식(예: CR-001)은 애플리케이션 입력 검증에서 강제한다.
     -- DB에서는 버전별 CHECK 함수 호환성을 고려해 유일성만 보장한다.
     CONSTRAINT ck_care_rules_name_not_blank
         CHECK (CHAR_LENGTH(TRIM(name)) > 0)
@@ -279,7 +287,9 @@ CREATE TABLE rule_conditions (
                 'situations',
                 'careAvailability',
                 'preCareChecks',
-                'completedHistory'
+                'completedHistory',
+                -- 온보딩에서 1회 설정하는 예상 환경(ENV-*). 값이 없으면 환경 보정 없이 진행한다.
+                'environments'
             )
         ),
     CONSTRAINT ck_rule_conditions_operator
@@ -759,7 +769,8 @@ CREATE TABLE care_result_rules (
         CHECK (
             match_reason IN (
                 'SAFETY', 'PROHIBITION', 'CURRENT_STATE',
-                'SITUATION', 'COMMON', 'HISTORY'
+                'SITUATION', 'COMMON', 'HISTORY',
+                'ENVIRONMENT', 'APPEARANCE', 'INGREDIENT', 'FALLBACK'
             )
         )
 ) ENGINE = InnoDB

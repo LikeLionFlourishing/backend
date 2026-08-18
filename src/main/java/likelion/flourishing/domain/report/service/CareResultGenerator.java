@@ -15,6 +15,7 @@ import likelion.flourishing.domain.report.entity.CareResultItem;
 import likelion.flourishing.domain.report.entity.CareResultRule;
 import likelion.flourishing.domain.report.entity.ResultType;
 import likelion.flourishing.domain.report.entity.RuleActionType;
+import likelion.flourishing.domain.report.entity.RuleCategory;
 import likelion.flourishing.domain.report.entity.CareResultIngredient;
 import likelion.flourishing.domain.report.entity.CareResultIngredientRule;
 import likelion.flourishing.domain.report.repository.CareResultIngredientRepository;
@@ -48,6 +49,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>AI는 문구를 고르고 요약을 쓰는 데만 쓴다. 실패하면 규칙이 정한 순서로 앞에서부터 채우고
  * 승인된 fallbackText를 요약으로 쓴다. 사용자에게는 결과가 나가고 상태만 FALLBACK이 된다.
+ *
+ * <p>상황 규칙이 하나도 걸리지 않으면 폴백 규칙만 단독으로 쓴다. 이때는 AI를 부르지 않고 성분도
+ * 내보내지 않는다. 자세한 이유는 {@link #planFallbackOnly}에 적어 두었다.
  */
 @Component
 public class CareResultGenerator {
@@ -112,12 +116,90 @@ public class CareResultGenerator {
             throw new BusinessException(ErrorCode.RULE_ENGINE_UNAVAILABLE);
         }
 
-        CareActionAllowList allowList = CareActionAllowList.from(matchedRules);
         CareResultPlan plan = resultType == ResultType.CLINICIAN_CHECK
-                ? planClinicianCheck(catalog, matchedRules, allowList)
-                : planSelfCareGuide(catalog, matchedRules, allowList, facts);
+                ? planClinicianCheck(catalog, withoutFallback(matchedRules))
+                : planSelfCare(catalog, matchedRules, facts);
         assertStorable(plan);
         return plan;
+    }
+
+    /**
+     * 일반 관리 안내를 정한다. 폴백을 단독으로 쓸 상황인지에 따라 두 갈래로 나뉜다.
+     *
+     * <p>상황 규칙이 하나도 걸리지 않고 폴백 규칙이 있으면 폴백만 단독으로 쓴다. 규칙 문서가
+     * 폴백을 "다른 관리 규칙과 조합하지 않는 독립 규칙"으로 정했다. 원인을 특정하지 못한 상태에서
+     * 공통 안내나 겉모습 규칙을 함께 얹으면 무엇 때문에 이 안내가 나왔는지 읽을 수 없게 된다.
+     *
+     * <p>폴백 규칙이 정의되지 않은 규칙 세트라면 평소대로 조합한다. 이때 남는 것은 대개 공통
+     * 규칙인데, 문서도 공통 안내 단독 출력을 "안전하지만 완결성이 떨어지는 상태"로 보고 폴백을
+     * 따로 둔 것이다. 즉 폴백이 없으면 공통 안내가 그 자리를 대신하고, 결과를 못 내보낼 이유는
+     * 없다.
+     *
+     * <p>상황 규칙이 걸렸다면 폴백은 빠진다. 폴백 규칙은 조건이 없어 항상 후보에 들어오지만
+     * 조합 대상이 아니다.
+     */
+    private CareResultPlan planSelfCare(
+            ActiveRuleCatalog catalog,
+            List<CareRuleSnapshot> matchedRules,
+            RuleEvaluationFacts facts
+    ) {
+        if (usesFallbackOnly(matchedRules)) {
+            return planFallbackOnly(catalog, matchedRules);
+        }
+        List<CareRuleSnapshot> rules = withoutFallback(matchedRules);
+        return planSelfCareGuide(catalog, rules, CareActionAllowList.from(rules), facts);
+    }
+
+    private boolean usesFallbackOnly(List<CareRuleSnapshot> matchedRules) {
+        return !hasCategory(matchedRules, RuleCategory.SITUATION)
+                && hasCategory(matchedRules, RuleCategory.FALLBACK);
+    }
+
+    private boolean hasCategory(List<CareRuleSnapshot> matchedRules, RuleCategory category) {
+        return matchedRules.stream().anyMatch(rule -> rule.category() == category);
+    }
+
+    /** 폴백은 단독 실행 전용이라 다른 규칙과 함께 쓰지 않는다. */
+    private List<CareRuleSnapshot> withoutFallback(List<CareRuleSnapshot> matchedRules) {
+        return matchedRules.stream()
+                .filter(rule -> rule.category() != RuleCategory.FALLBACK)
+                .toList();
+    }
+
+    /**
+     * 폴백 규칙만으로 안내를 정한다.
+     *
+     * <p>AI를 부르지 않는다. 무엇 때문에 불편이 생겼는지 모르는 상태라, 요약을 새로 쓰게 하면
+     * 원인을 짐작한 문장이 나올 여지가 생긴다. 규칙 문서도 폴백에서 임의 안심과 질환명 추측을
+     * 금지 표현으로 못 박았다. 그래서 승인된 브릿지 문구를 요약으로 쓰고 행동은 규칙 순서대로
+     * 채운다.
+     *
+     * <p>성분도 내보내지 않는다. 원인이 불특정한 상태에서 성분을 권하면 근거 없는 추천이 된다.
+     */
+    private CareResultPlan planFallbackOnly(
+            ActiveRuleCatalog catalog,
+            List<CareRuleSnapshot> matchedRules
+    ) {
+        List<CareRuleSnapshot> fallbackRules = matchedRules.stream()
+                .filter(rule -> rule.category() == RuleCategory.FALLBACK)
+                .toList();
+        CareActionAllowList allowList = CareActionAllowList.from(fallbackRules);
+        List<PlannedCareItem> items = itemPlanner.planFromRules(allowList);
+        if (items.isEmpty()) {
+            throw new BusinessException(ErrorCode.RULE_ENGINE_UNAVAILABLE);
+        }
+
+        return new CareResultPlan(
+                catalog.ruleSetId(),
+                catalog.versionCode(),
+                ResultType.SELF_CARE_GUIDE,
+                AiGenerationStatus.FALLBACK,
+                requireFallbackText(allowList),
+                null,
+                fallbackRules,
+                items,
+                List.of()
+        );
     }
 
     /** 정해 둔 결과를 저장한다. 외부 호출이 끼지 않아 트랜잭션이 짧게 끝난다. */
@@ -221,9 +303,9 @@ public class CareResultGenerator {
      */
     private CareResultPlan planClinicianCheck(
             ActiveRuleCatalog catalog,
-            List<CareRuleSnapshot> matchedRules,
-            CareActionAllowList allowList
+            List<CareRuleSnapshot> matchedRules
     ) {
+        CareActionAllowList allowList = CareActionAllowList.from(matchedRules);
         List<PlannedCareItem> clinicianMessage = itemPlanner.planClinicianMessage(allowList);
         if (clinicianMessage.isEmpty()) {
             throw new BusinessException(ErrorCode.RULE_ENGINE_UNAVAILABLE);
