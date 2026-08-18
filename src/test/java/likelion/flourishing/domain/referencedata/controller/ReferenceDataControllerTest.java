@@ -5,6 +5,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import likelion.flourishing.domain.referencedata.service.ReferenceDataService;
+import likelion.flourishing.global.config.ProblemProperties;
+import likelion.flourishing.global.exception.GlobalExceptionHandler;
+import likelion.flourishing.global.exception.ProblemFactory;
 import likelion.flourishing.global.config.CorsProperties;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
@@ -38,8 +41,8 @@ import org.springframework.test.web.servlet.MockMvc;
  */
 @WebMvcTest(ReferenceDataController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import({ReferenceDataService.class, GuideSectionAssembler.class})
-@EnableConfigurationProperties(CorsProperties.class)
+@Import({ReferenceDataService.class, GuideSectionAssembler.class, GlobalExceptionHandler.class, ProblemFactory.class})
+@EnableConfigurationProperties({CorsProperties.class, ProblemProperties.class})
 class ReferenceDataControllerTest {
 
     @Autowired
