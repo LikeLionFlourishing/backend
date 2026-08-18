@@ -83,6 +83,23 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
+    /**
+     * 매핑되지 않은 경로는 404다.
+     *
+     * <p>핸들러가 없으면 500이 나간다. 인가가 열어 둔 경로 중 실제 자원이 없는 자리에서 생기는데,
+     * 운영 프로파일이 Swagger를 닫으면 {@code /swagger-ui.html}이 바로 그런 자리가 된다.
+     */
+    @Test
+    void unmappedPathReturnsNotFound() throws Exception {
+        mockMvc.perform(get("/test/no-such-path"))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string("Content-Type",
+                        Matchers.startsWith(MediaType.APPLICATION_PROBLEM_JSON_VALUE)))
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.requestId").value(Matchers.startsWith("req_")));
+    }
+
     @Test
     void unexpectedExceptionHidesInternalDetails() throws Exception {
         mockMvc.perform(get("/test/unexpected"))
