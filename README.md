@@ -26,7 +26,9 @@
 cp .env.example .env
 ```
 
-`.env`의 `DB_PASSWORD`를 로컬에서 사용할 값으로 변경합니다. 실제 비밀값은 Git에 커밋하지 않습니다.
+`.env`의 `DB_PASSWORD`를 로컬에서 사용할 값으로 변경하고,
+`RECORD_DATA_ENCRYPTION_KEY`에는 `openssl rand -base64 32`로 생성한 값을 입력합니다.
+실제 비밀값은 Git에 커밋하지 않습니다.
 
 ### 2. MySQL과 Redis 실행
 
@@ -97,6 +99,7 @@ DB_PASSWORD=<비밀번호> docker compose --profile app up --build
 | `REDIS_HOST` | Redis 호스트 | `localhost` |
 | `REDIS_PORT` | Redis 포트 | `6379` |
 | `FRONTEND_ALLOWED_ORIGINS` | 허용할 프론트엔드 Origin 목록 | `http://localhost:5173` |
+| `RECORD_DATA_ENCRYPTION_KEY` | 피부 기록 원문 암호화·목록 커서 서명용 Base64 32바이트 마스터 키 | 없음(필수) |
 | `SERVER_PORT` | 애플리케이션 포트 | `8080` |
 
 ## 데이터베이스

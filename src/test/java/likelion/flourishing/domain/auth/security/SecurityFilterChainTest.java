@@ -147,6 +147,17 @@ class SecurityFilterChainTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void skinRecordQueriesRequireAuthentication() throws Exception {
+        mockMvc.perform(get("/v1/skin-reports"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+
+        mockMvc.perform(get("/v1/skin-reports/0198a31f-f33f-7000-8000-000000000001"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+    }
+
     /**
      * Spring MVC가 4xx로 정의한 예외가 500으로 새지 않는지 확인한다. GlobalExceptionHandler가
      * Exception 캐치올을 들고 있어 따로 받지 않으면 전부 500이 된다.

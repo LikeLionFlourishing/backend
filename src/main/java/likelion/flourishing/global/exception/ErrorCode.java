@@ -27,6 +27,18 @@ public enum ErrorCode {
     ),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "접근 거부", "이 요청을 수행할 권한이 없습니다."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "리소스 없음", "요청한 리소스를 찾을 수 없습니다."),
+    RESOURCE_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "RESOURCE_NOT_FOUND",
+            "리소스 없음",
+            "요청한 리소스를 찾을 수 없습니다."
+    ),
+    INVALID_CURSOR(
+            HttpStatus.BAD_REQUEST,
+            "INVALID_CURSOR",
+            "잘못된 커서",
+            "기록 목록 커서가 올바르지 않습니다."
+    ),
     METHOD_NOT_ALLOWED(
             HttpStatus.METHOD_NOT_ALLOWED,
             "METHOD_NOT_ALLOWED",

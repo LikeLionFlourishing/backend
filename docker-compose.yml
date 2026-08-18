@@ -13,6 +13,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       FRONTEND_ALLOWED_ORIGINS: ${FRONTEND_ALLOWED_ORIGINS:-http://localhost:5173}
+      RECORD_DATA_ENCRYPTION_KEY: ${RECORD_DATA_ENCRYPTION_KEY:?RECORD_DATA_ENCRYPTION_KEY is required}
     depends_on:
       mysql-db:
         condition: service_healthy
