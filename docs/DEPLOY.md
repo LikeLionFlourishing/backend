@@ -63,11 +63,23 @@ Web Push를 쓰려면 VAPID 키쌍이 필요합니다. 생성 방법은 [README]
 | `RECORD_DATA_ENCRYPTION_KEY` | `openssl rand -base64 32` | 기동 전 중단 |
 | `PUSH_DATA_ENCRYPTION_KEY` | `openssl rand -base64 32` | 기동 전 중단 |
 | `FRONTEND_ALLOWED_ORIGINS` | `https://app.example.com` | 기동 전 중단 |
+| `DOCS_BASIC_AUTH_USER` | API 문서 계정 이름 | 프록시 기동 전 중단 |
+| `DOCS_BASIC_AUTH_HASH` | `caddy hash-password` 결과 | 프록시 기동 전 중단 |
 | `SESSION_COOKIE_SAME_SITE` | `Lax` 또는 `None` | `Lax` |
+| `API_DOCS_ENABLED` | `true` 면 서버에서 문서를 연다 | `false`(닫힘) |
 | `VAPID_*` | P-256 키쌍 | 알림 발송만 건너뜀 |
 | `OPENAI_API_KEY`·`OPENAI_MODEL` | OpenAI 키와 모델 | AI 설명이 규칙 문구로 대체 |
 
 `SESSION_COOKIE_SAME_SITE`는 프런트엔드가 어디 있는지에 따라 다릅니다. API와 같은 등록 도메인이면 `Lax`로 두고, 다른 도메인이면 `None`이 필요합니다. `None`은 브라우저가 Secure를 함께 요구하는데 HTTPS라 충족됩니다.
+
+API 문서 계정은 이렇게 만듭니다. 문서를 켜지 않아도 `Caddyfile`이 이 값을 읽으므로 비워 두면 프록시가 기동하지 못합니다.
+
+```bash
+HASH=$(docker run --rm caddy:2-alpine caddy hash-password --plaintext '비밀번호')
+printf 'DOCS_BASIC_AUTH_HASH=%s\n' "$(printf '%s' "$HASH" | sed 's/\$/$$/g')" >> .env
+```
+
+해시의 `$`를 `$$`로 바꿔 넣는 것이 중요합니다. Compose가 `$`를 변수 시작으로 읽어 값이 잘리면 인증이 항상 실패합니다. 넣은 뒤 `docker compose -f docker-compose.prod.yml exec proxy printenv DOCS_BASIC_AUTH_HASH`로 `$2a$14$...` 형태가 그대로 들어갔는지 확인하세요.
 
 `.env` 권한을 좁혀 둡니다.
 
@@ -113,6 +125,33 @@ curl -i https://api.example.com/health
 ```
 
 인자 없이 실행하면 마이그레이션과 시드만 적용하고 결과를 세어 보여 줍니다. `care_rules 26 / ingredients 8 / guide_sections 6 / active_rule_sets 1`이면 정상입니다.
+
+## API 문서를 서버에서 열기
+
+기본은 닫힘입니다. 저장소의 `docs/openapi.generated.json`으로 충분하면 켜지 않는 편이 낫습니다. 서버에서 Swagger UI를 봐야 하면 `.env`에 아래를 넣고 다시 올립니다.
+
+```bash
+API_DOCS_ENABLED=true
+```
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+접속 주소는 이렇습니다. `DOCS_BASIC_AUTH_USER`와 설정한 비밀번호로 Basic 인증을 통과해야 합니다.
+
+- Swagger UI: `https://api.example.com/swagger-ui.html`
+- OpenAPI JSON: `https://api.example.com/v3/api-docs`
+
+두 겹으로 막혀 있습니다. 프록시가 `/swagger-ui*`와 `/v3/api-docs*`에 Basic 인증을 걸고, 애플리케이션은 `API_DOCS_ENABLED`가 꺼져 있으면 404를 돌려줍니다. 그래서 자격을 넣어도 문서를 켜지 않은 배포에서는 404가 나옵니다.
+
+인증이 계속 실패하면 `.env`의 해시에서 `$`가 `$$`로 이스케이프되었는지 확인하세요.
+
+```bash
+docker compose -f docker-compose.prod.yml exec proxy printenv DOCS_BASIC_AUTH_HASH
+```
+
+`$2a$14$...` 형태로 온전히 나와야 합니다. `2a14...` 처럼 `$`가 빠져 있으면 Compose가 변수로 해석해 값을 삼킨 것입니다.
 
 ## 6. 다시 배포하기
 
