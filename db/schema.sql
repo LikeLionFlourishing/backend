@@ -1,6 +1,7 @@
 -- 관리하는 행보관 MySQL DDL
 -- 작성일: 2026-08-09
--- 대상: MySQL 8.0.16 이상 / InnoDB / utf8mb4
+-- 대상: MySQL 8.0.19 이상 / InnoDB / utf8mb4
+--       (8.0.16 CHECK 제약, 8.0.19 db/seed의 INSERT ... AS new 별칭 문법)
 -- ORM: 미정
 --
 -- 중요:

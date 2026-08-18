@@ -79,13 +79,33 @@ OPENAI_MODEL=gpt-4.1-mini
 DB_PASSWORD=<비밀번호> docker compose up -d mysql-db redis
 ```
 
-### 3. 스키마 적용
+### 3. 스키마와 기준 데이터 적용
 
-애플리케이션은 `ddl-auto: validate`를 사용하므로 최초 한 번 DDL을 직접 적용해야 합니다.
+애플리케이션은 `ddl-auto: validate`를 사용하고 `spring.sql.init.mode`도 `never`라, DDL과
+기준 데이터를 직접 적용해야 합니다. 아래 순서대로 한 번씩 돌립니다.
 
 ```bash
-mysql -h 127.0.0.1 -P 3306 -u root -p flourishing < db/schema.sql
+DB="mysql -h 127.0.0.1 -P 3306 -u root -p flourishing"
+
+# 1. 스키마 (필수)
+$DB < db/schema.sql
+
+# 2. 기준 데이터 (필수)
+for f in db/seed/*.sql; do $DB < "$f"; done
 ```
+
+**2번을 건너뛰면 오류 없이 화면이 빕니다.** `guide_sections` 가 비어 있으면
+`GET /v1/reference-data/skin-report-options` 와 결과 카드의 `guideSections` 가 `[]` 로
+나가고, 프론트가 결과 화면 골격을 그릴 수 없습니다. 기동은 정상적으로 되고 로그에 경고만
+남으므로 알아차리기 어렵습니다.
+
+적용됐는지 확인하려면 6행이 있어야 합니다.
+
+```bash
+$DB -e "SELECT COUNT(*) FROM guide_sections;"   # 6
+```
+
+`db/seed/` 는 여러 번 돌려도 결과가 같습니다. 이미 있으면 문구만 최신으로 맞춥니다.
 
 ### 4. 애플리케이션 실행
 
@@ -157,8 +177,23 @@ DB_PASSWORD=<비밀번호> docker compose --profile app up --build
 - DB 이름: `flourishing`
 - 문자셋: `utf8mb4`
 - 기본 시간대: UTC
-- 스키마: `db/schema.sql`
 - 애플리케이션은 스키마를 자동 생성하거나 변경하지 않습니다.
+
+`db/` 아래 세 종류를 구분해서 씁니다.
+
+| 경로 | 무엇 | 언제 |
+|---|---|---|
+| `db/schema.sql` | 전체 DDL | 새 DB를 만들 때 한 번 |
+| `db/seed/` | 기준 데이터 | 스키마 적용 뒤 한 번. 여러 번 돌려도 안전 |
+| `db/migration/` | 기존 데이터 변환 | 이미 데이터가 있는 DB를 새 스키마로 옮길 때 |
+
+**`db/migration/` 은 새 DB에는 돌리지 않습니다.** `db/schema.sql` 이 이미 최신 정의를 담고
+있어, 빈 DB에 스키마를 적용하면 마이그레이션이 할 일이 없습니다. 운영 중인 DB를 옮길 때만
+**스키마 변경 전에** 먼저 돌립니다. 순서를 지키지 않으면 새 CHECK 제약을 만들 수 없어
+적용이 중간에 멈춥니다. 각 스크립트 머리말에 무엇을 왜 옮기는지 적혀 있습니다.
+
+요구 버전은 MySQL **8.0.19 이상**입니다. `db/seed/` 가 `INSERT ... AS new ON DUPLICATE KEY
+UPDATE` 별칭 문법을 쓰고, 그 문법이 8.0.19에서 들어왔습니다.
 
 ## 브랜치 전략
 
