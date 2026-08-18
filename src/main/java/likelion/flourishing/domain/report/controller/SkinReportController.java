@@ -10,7 +10,7 @@ import java.net.URI;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.dto.request.CreateSkinReportRequest;
-import likelion.flourishing.domain.report.dto.response.CareGuideResponse;
+import likelion.flourishing.domain.record.dto.response.CareResultResponse;
 import likelion.flourishing.domain.report.dto.response.SkinReportCreatedResponse;
 import likelion.flourishing.domain.report.idempotency.IdempotentResponse;
 import likelion.flourishing.domain.report.service.CareGuideRegenerationService;
@@ -72,7 +72,7 @@ public class SkinReportController {
     @Operation(summary = "관리 설명 재생성")
     @ApiResponse(
             responseCode = "200",
-            content = @Content(schema = @Schema(implementation = CareGuideResponse.class))
+            content = @Content(schema = @Schema(implementation = CareResultResponse.class))
     )
     @PostMapping("/{reportId}/care-guide-generations")
     public ResponseEntity<String> regenerateCareGuide(

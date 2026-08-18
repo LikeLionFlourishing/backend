@@ -1,6 +1,6 @@
 package likelion.flourishing.domain.report.similarity;
 
-import likelion.flourishing.domain.report.dto.response.SimilarExperienceSummaryResponse;
+import likelion.flourishing.domain.record.dto.response.SimilarExperienceResponse;
 
 /**
  * 고른 유사 경험과 그것을 응답에 담을 모양.
@@ -10,6 +10,6 @@ import likelion.flourishing.domain.report.dto.response.SimilarExperienceSummaryR
  */
 public record FoundSimilarExperience(
         ScoredSimilarExperience scored,
-        SimilarExperienceSummaryResponse response
+        SimilarExperienceResponse response
 ) {
 }

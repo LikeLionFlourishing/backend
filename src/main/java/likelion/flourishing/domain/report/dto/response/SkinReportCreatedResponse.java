@@ -33,7 +33,7 @@ public class SkinReportCreatedResponse {
     private final String rawText;
     private final StructuredSelectionsResponse confirmed;
     private final List<PreCareCheck> preCareChecks;
-    private final CareGuideResponse careResult;
+    private final CareResultResponse careResult;
     private final OffsetDateTime followUpAvailableAt;
     private final OffsetDateTime followUpExpiresAt;
     private final OffsetDateTime createdAt;
@@ -46,7 +46,7 @@ public class SkinReportCreatedResponse {
             String rawText,
             StructuredSelectionsResponse confirmed,
             List<PreCareCheck> preCareChecks,
-            CareGuideResponse careResult,
+            CareResultResponse careResult,
             OffsetDateTime followUpAvailableAt,
             OffsetDateTime followUpExpiresAt,
             OffsetDateTime createdAt

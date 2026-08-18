@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-import likelion.flourishing.domain.report.dto.response.CareGuideResponse;
+import likelion.flourishing.domain.record.dto.response.CareResultResponse;
 import likelion.flourishing.domain.report.dto.response.GuideSectionResponse;
 import likelion.flourishing.domain.report.dto.response.RecommendedIngredientResponse;
 import likelion.flourishing.domain.report.entity.AiGenerationStatus;
@@ -36,7 +36,7 @@ class CareGuideResponseAssemblerTest {
     void selfCareGuideCarriesSixSectionsAndTheChosenIngredients() {
         CareRuleSnapshot rule = CareRuleFixtures.commonRule();
 
-        CareGuideResponse response = assembler.assemble(
+        CareResultResponse response = assembler.assemble(
                 selfCareResult(),
                 "v0.1",
                 List.of(rule),
@@ -57,7 +57,7 @@ class CareGuideResponseAssemblerTest {
 
     @Test
     void ruleWithoutIngredientsMarksTheIngredientSectionEmpty() {
-        CareGuideResponse response = assembler.assemble(
+        CareResultResponse response = assembler.assemble(
                 selfCareResult(),
                 "v0.1",
                 List.of(CareRuleFixtures.commonRule()),
@@ -76,7 +76,7 @@ class CareGuideResponseAssemblerTest {
     void clinicianCheckCarriesNeitherSectionsNorIngredients() {
         CareRuleSnapshot rule = CareRuleFixtures.safetyRule();
 
-        CareGuideResponse response = assembler.assemble(
+        CareResultResponse response = assembler.assemble(
                 clinicianResult(),
                 "v0.1",
                 List.of(rule),
@@ -96,7 +96,7 @@ class CareGuideResponseAssemblerTest {
     void ingredientWhoseSourceRuleIsNotAppliedIsDropped() {
         CareRuleSnapshot applied = CareRuleFixtures.commonRule();
 
-        CareGuideResponse response = assembler.assemble(
+        CareResultResponse response = assembler.assemble(
                 selfCareResult(),
                 "v0.1",
                 List.of(applied),
@@ -113,7 +113,7 @@ class CareGuideResponseAssemblerTest {
     void onlyTheSourceRulesInsideMatchedRulesSurvive() {
         CareRuleSnapshot applied = CareRuleFixtures.commonRule();
 
-        CareGuideResponse response = assembler.assemble(
+        CareResultResponse response = assembler.assemble(
                 selfCareResult(),
                 "v0.1",
                 List.of(applied),
