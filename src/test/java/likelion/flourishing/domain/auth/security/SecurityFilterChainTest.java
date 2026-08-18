@@ -80,6 +80,25 @@ class SecurityFilterChainTest {
     }
 
     @Test
+    void analyticsEventRequestWithoutSessionCookieIsUnauthorized() throws Exception {
+        mockMvc.perform(post("/v1/analytics-events")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "events": [
+                                    {
+                                      "eventId": "0198a31f-f33f-7000-8000-000000000001",
+                                      "name": "REPORT_STARTED",
+                                      "occurredAt": "2026-08-15T03:00:00Z"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+    }
+
+    @Test
     void requestWithValidSessionCookieReachesController() throws Exception {
         when(sessionService.authenticate(eq(SESSION_TOKEN), eq("GET"), isNull()))
                 .thenReturn(Optional.of(principal()));

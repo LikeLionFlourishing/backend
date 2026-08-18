@@ -79,6 +79,7 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .requestMatchers(HttpMethod.POST, "/v1/users").permitAll()
                         .requestMatchers(HttpMethod.POST, "/v1/sessions").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/v1/analytics-events").authenticated()
                         .requestMatchers("/v1/sessions/current", "/v1/me").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/v1/me/onboarding").authenticated()
                         .requestMatchers(HttpMethod.GET, "/v1/home").authenticated()
