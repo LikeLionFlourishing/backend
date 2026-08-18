@@ -1,4 +1,4 @@
-package likelion.flourishing.analytics.dto.request;
+package likelion.flourishing.domain.analytics.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -12,7 +12,7 @@ import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
-import likelion.flourishing.analytics.domain.AnalyticsEventName;
+import likelion.flourishing.domain.analytics.entity.AnalyticsEventName;
 
 /** 측정 이벤트 한 건. eventId는 클라이언트 재전송을 멱등 처리하는 식별자다. */
 @Schema(additionalProperties = Schema.AdditionalPropertiesValue.FALSE)

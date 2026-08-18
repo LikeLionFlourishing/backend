@@ -1,4 +1,4 @@
-package likelion.flourishing.analytics.dto.request;
+package likelion.flourishing.domain.analytics.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;

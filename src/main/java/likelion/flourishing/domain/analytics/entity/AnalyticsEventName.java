@@ -1,4 +1,4 @@
-package likelion.flourishing.analytics.domain;
+package likelion.flourishing.domain.analytics.entity;
 
 /** 분석용으로 저장할 수 있는 사용자 행동 이름. DDL의 허용 목록과 같은 값을 유지한다. */
 public enum AnalyticsEventName {

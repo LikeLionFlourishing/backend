@@ -1,15 +1,15 @@
-package likelion.flourishing.analytics.repository;
+package likelion.flourishing.domain.analytics.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
-import likelion.flourishing.analytics.domain.AnalyticsEvent;
-import likelion.flourishing.analytics.dto.request.AnalyticsEventBatchRequest;
-import likelion.flourishing.analytics.dto.request.AnalyticsEventPropertiesRequest;
-import likelion.flourishing.analytics.dto.request.AnalyticsEventRequest;
-import likelion.flourishing.analytics.service.AnalyticsEventService;
+import likelion.flourishing.domain.analytics.entity.AnalyticsEvent;
+import likelion.flourishing.domain.analytics.dto.request.AnalyticsEventBatchRequest;
+import likelion.flourishing.domain.analytics.dto.request.AnalyticsEventPropertiesRequest;
+import likelion.flourishing.domain.analytics.dto.request.AnalyticsEventRequest;
+import likelion.flourishing.domain.analytics.service.AnalyticsEventService;
 import likelion.flourishing.domain.auth.entity.User;
 import likelion.flourishing.domain.auth.repository.UserRepository;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;

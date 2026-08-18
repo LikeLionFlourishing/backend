@@ -1,11 +1,11 @@
-package likelion.flourishing.analytics.controller;
+package likelion.flourishing.domain.analytics.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import likelion.flourishing.analytics.dto.request.AnalyticsEventBatchRequest;
-import likelion.flourishing.analytics.dto.response.AnalyticsEventBatchResponse;
-import likelion.flourishing.analytics.service.AnalyticsEventService;
+import likelion.flourishing.domain.analytics.dto.request.AnalyticsEventBatchRequest;
+import likelion.flourishing.domain.analytics.dto.response.AnalyticsEventBatchResponse;
+import likelion.flourishing.domain.analytics.service.AnalyticsEventService;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

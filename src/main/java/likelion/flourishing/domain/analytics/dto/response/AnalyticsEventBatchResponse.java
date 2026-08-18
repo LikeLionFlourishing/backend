@@ -1,4 +1,4 @@
-package likelion.flourishing.analytics.dto.response;
+package likelion.flourishing.domain.analytics.dto.response;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;

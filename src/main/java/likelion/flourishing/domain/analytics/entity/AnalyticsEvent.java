@@ -1,4 +1,4 @@
-package likelion.flourishing.analytics.domain;
+package likelion.flourishing.domain.analytics.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

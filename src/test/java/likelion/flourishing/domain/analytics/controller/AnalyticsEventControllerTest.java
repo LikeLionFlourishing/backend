@@ -1,4 +1,4 @@
-package likelion.flourishing.analytics.controller;
+package likelion.flourishing.domain.analytics.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import likelion.flourishing.analytics.service.AnalyticsEventService;
+import likelion.flourishing.domain.analytics.service.AnalyticsEventService;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.global.config.CorsProperties;
 import likelion.flourishing.global.config.ProblemProperties;

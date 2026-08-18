@@ -1,4 +1,4 @@
-package likelion.flourishing.analytics.service;
+package likelion.flourishing.domain.analytics.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,10 +13,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
-import likelion.flourishing.analytics.dto.request.AnalyticsEventBatchRequest;
-import likelion.flourishing.analytics.dto.request.AnalyticsEventPropertiesRequest;
-import likelion.flourishing.analytics.dto.request.AnalyticsEventRequest;
-import likelion.flourishing.analytics.repository.AnalyticsEventRepository;
+import likelion.flourishing.domain.analytics.dto.request.AnalyticsEventBatchRequest;
+import likelion.flourishing.domain.analytics.dto.request.AnalyticsEventPropertiesRequest;
+import likelion.flourishing.domain.analytics.dto.request.AnalyticsEventRequest;
+import likelion.flourishing.domain.analytics.repository.AnalyticsEventRepository;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;

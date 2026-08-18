@@ -1,8 +1,8 @@
-package likelion.flourishing.analytics.repository;
+package likelion.flourishing.domain.analytics.repository;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
-import likelion.flourishing.analytics.domain.AnalyticsEvent;
+import likelion.flourishing.domain.analytics.entity.AnalyticsEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
