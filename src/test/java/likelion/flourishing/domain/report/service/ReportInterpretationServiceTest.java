@@ -10,10 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -25,7 +22,8 @@ import likelion.flourishing.domain.report.ai.SkinReportStructuringPort;
 import likelion.flourishing.domain.report.ai.StructuringOutcome;
 import likelion.flourishing.domain.report.dto.request.ManualSelectionsRequest;
 import likelion.flourishing.domain.report.dto.request.ReportInterpretationRequest;
-import likelion.flourishing.domain.report.dto.response.FieldSource;
+import likelion.flourishing.domain.report.dto.response.InterpretationFailureCode;
+import likelion.flourishing.domain.report.dto.response.MissingField;
 import likelion.flourishing.domain.report.dto.response.ProcessingStatus;
 import likelion.flourishing.domain.report.dto.response.ReportInterpretationResponse;
 import likelion.flourishing.domain.report.entity.Appearance;
@@ -58,7 +56,6 @@ class ReportInterpretationServiceTest {
 
     private static final UUID USER_ID = UUID.fromString("2c56fe08-ea1f-45fc-915d-c35b7c0bca39");
     private static final UUID SESSION_ID = UUID.fromString("5ecb88d8-6a21-4a54-8967-72599f078963");
-    private static final Instant NOW = Instant.parse("2026-08-15T03:00:00Z");
 
     @Mock
     private SkinReportStructuringPort structuringPort;
@@ -77,8 +74,7 @@ class ReportInterpretationServiceTest {
                 structuringPort,
                 consentGuard,
                 rateLimiter,
-                new OpenAiProperties(null, null, null, null, null, 0, null),
-                Clock.fixed(NOW, ZoneOffset.UTC)
+                new OpenAiProperties(null, null, null, null, null, 0, null)
         );
         when(rateLimiter.consume(any(), any(), anyInt(), any()))
                 .thenReturn(new RateLimitResult(true, 30, 29, 3600, 0L));
@@ -118,20 +114,13 @@ class ReportInterpretationServiceTest {
                 principal(), new ReportInterpretationRequest("오른쪽 턱이 빨개요.", manual)
         );
 
-        assertThat(response.getProcessingStatus()).isEqualTo(ProcessingStatus.SUCCEEDED);
-        assertThat(response.getStructured().getPrimaryArea()).isEqualTo(BodyArea.RIGHT_CHIN);
-        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.APP_REDNESS);
-        assertThat(response.getStructured().getOtherAreasNote()).isEqualTo("왼쪽 목에도 조금 있어요");
-        assertThat(response.getFieldSources())
-                .containsEntry("primaryArea", FieldSource.MANUAL)
-                .containsEntry("appearances", FieldSource.MANUAL)
-                .containsEntry("otherAreasNote", FieldSource.MANUAL)
-                .containsEntry("sensations", FieldSource.AI)
-                .containsEntry("situations", FieldSource.AI)
-                .containsEntry("careAvailability", FieldSource.AI);
-        assertThat(response.getStructured().getSensations()).containsExactly(Sensation.REDNESS);
-        assertThat(response.getInterpretedAt())
-                .isEqualTo(LocalDateTime.ofInstant(NOW, ZoneOffset.UTC).atOffset(ZoneOffset.UTC));
+        assertThat(response.getProcessingStatus()).isEqualTo(ProcessingStatus.SUCCESS);
+        assertThat(response.getProposed().getPrimaryArea()).isEqualTo(BodyArea.RIGHT_CHIN);
+        assertThat(response.getProposed().getAppearances()).containsExactly(Appearance.APP_REDNESS);
+        assertThat(response.getProposed().getOtherAreasNote()).isEqualTo("왼쪽 목에도 조금 있어요");
+        assertThat(response.getProposed().getSensations()).containsExactly(Sensation.REDNESS);
+        assertThat(response.getMissingFields()).isEmpty();
+        assertThat(response.getAmbiguities()).isEmpty();
     }
 
     /** 사용자가 일부러 뺀 값이 AI 값으로 되살아나면 안 된다. */
@@ -152,7 +141,7 @@ class ReportInterpretationServiceTest {
                 principal(), new ReportInterpretationRequest("턱이 빨개요.", manual)
         );
 
-        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.APP_REDNESS);
+        assertThat(response.getProposed().getAppearances()).containsExactly(Appearance.APP_REDNESS);
     }
 
     @Test
@@ -168,12 +157,15 @@ class ReportInterpretationServiceTest {
         );
 
         assertThat(response.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
-        assertThat(response.getFailureCode()).isEqualTo(AiFailureCode.AI_TIMEOUT);
-        assertThat(response.getStructured().getPrimaryArea()).isEqualTo(BodyArea.NECK);
-        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.APP_OTHER);
-        assertThat(response.getFieldSources())
-                .containsEntry("primaryArea", FieldSource.MANUAL)
-                .containsEntry("sensations", FieldSource.NONE);
+        assertThat(response.getFailureCode()).isEqualTo(InterpretationFailureCode.AI_TIMEOUT);
+        assertThat(response.getProposed().getPrimaryArea()).isEqualTo(BodyArea.NECK);
+        assertThat(response.getProposed().getAppearances()).containsExactly(Appearance.APP_OTHER);
+        assertThat(response.getMissingFields())
+                .containsExactly(
+                        MissingField.SENSATIONS,
+                        MissingField.SITUATIONS,
+                        MissingField.CARE_AVAILABILITY
+                );
     }
 
     @Test
@@ -184,11 +176,16 @@ class ReportInterpretationServiceTest {
                 principal(), new ReportInterpretationRequest("잘 모르겠어요.", null)
         );
 
-        assertThat(response.getProcessingStatus()).isEqualTo(ProcessingStatus.SUCCEEDED);
-        assertThat(response.getStructured().getPrimaryArea()).isNull();
-        assertThat(response.getFieldSources())
-                .containsEntry("primaryArea", FieldSource.NONE)
-                .containsEntry("otherAreasNote", FieldSource.NONE);
+        assertThat(response.getProcessingStatus()).isEqualTo(ProcessingStatus.SUCCESS);
+        assertThat(response.getProposed().getPrimaryArea()).isNull();
+        assertThat(response.getMissingFields())
+                .containsExactly(
+                        MissingField.PRIMARY_AREA,
+                        MissingField.APPEARANCES,
+                        MissingField.SENSATIONS,
+                        MissingField.SITUATIONS,
+                        MissingField.CARE_AVAILABILITY
+                );
     }
 
     /** 단독 선택 위반이 남은 그룹은 직전 상황뿐이다. 겉모습·불편은 어떤 조합이든 통과한다. */

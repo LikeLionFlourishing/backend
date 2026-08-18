@@ -1,13 +1,8 @@
 package likelion.flourishing.domain.report.service;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
@@ -17,7 +12,9 @@ import likelion.flourishing.domain.report.ai.SkinReportStructuringPort;
 import likelion.flourishing.domain.report.ai.StructuringOutcome;
 import likelion.flourishing.domain.report.dto.request.ManualSelectionsRequest;
 import likelion.flourishing.domain.report.dto.request.ReportInterpretationRequest;
-import likelion.flourishing.domain.report.dto.response.FieldSource;
+import likelion.flourishing.domain.report.dto.response.AmbiguityResponse;
+import likelion.flourishing.domain.report.dto.response.InterpretationFailureCode;
+import likelion.flourishing.domain.report.dto.response.MissingField;
 import likelion.flourishing.domain.report.dto.response.ReportInterpretationResponse;
 import likelion.flourishing.domain.report.dto.response.StructuredSelectionsResponse;
 import likelion.flourishing.domain.report.entity.Appearance;
@@ -25,10 +22,15 @@ import likelion.flourishing.domain.report.entity.BodyArea;
 import likelion.flourishing.domain.report.entity.CareAvailability;
 import likelion.flourishing.domain.report.entity.Sensation;
 import likelion.flourishing.domain.report.entity.Situation;
+import likelion.flourishing.global.exception.ProblemFactory;
 import likelion.flourishing.global.exception.TooManyRequestsException;
 import likelion.flourishing.support.RateLimitResult;
 import likelion.flourishing.support.RateLimiter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 
 /**
  * 한 문장을 선택값으로 옮기고 사용자가 직접 고른 값을 앞세운다.
@@ -42,12 +44,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class ReportInterpretationService {
 
-    private static final String FIELD_PRIMARY_AREA = "primaryArea";
-    private static final String FIELD_OTHER_AREAS_NOTE = "otherAreasNote";
-    private static final String FIELD_APPEARANCES = "appearances";
-    private static final String FIELD_SENSATIONS = "sensations";
-    private static final String FIELD_SITUATIONS = "situations";
-    private static final String FIELD_CARE_AVAILABILITY = "careAvailability";
+    private static final Logger log = LoggerFactory.getLogger(ReportInterpretationService.class);
 
     private static final String RATE_LIMIT_SCOPE = "report-interpretation";
 
@@ -55,20 +52,17 @@ public class ReportInterpretationService {
     private final SensitiveDataConsentGuard consentGuard;
     private final RateLimiter rateLimiter;
     private final OpenAiProperties openAiProperties;
-    private final Clock clock;
 
     public ReportInterpretationService(
             SkinReportStructuringPort structuringPort,
             SensitiveDataConsentGuard consentGuard,
             RateLimiter rateLimiter,
-            OpenAiProperties openAiProperties,
-            Clock clock
+            OpenAiProperties openAiProperties
     ) {
         this.structuringPort = structuringPort;
         this.consentGuard = consentGuard;
         this.rateLimiter = rateLimiter;
         this.openAiProperties = openAiProperties;
-        this.clock = clock;
     }
 
     /**
@@ -91,41 +85,96 @@ public class ReportInterpretationService {
         StructuringOutcome outcome = structuringPort.structure(request.rawText());
         ExtractedSelections extracted = outcome.extracted();
 
-        Map<String, FieldSource> fieldSources = new LinkedHashMap<>();
-        BodyArea primaryArea = mergeSingle(
-                manual.primaryArea(), extracted.primaryArea(), FIELD_PRIMARY_AREA, fieldSources
-        );
+        BodyArea primaryArea = mergeSingle(manual.primaryArea(), extracted.primaryArea());
         CareAvailability careAvailability = mergeSingle(
-                manual.careAvailability(), extracted.careAvailability(), FIELD_CARE_AVAILABILITY, fieldSources
+                manual.careAvailability(), extracted.careAvailability()
         );
-        List<Appearance> appearances = mergeMultiple(
-                manual.appearanceSet(), extracted.appearances(), FIELD_APPEARANCES, fieldSources
-        );
-        List<Sensation> sensations = mergeMultiple(
-                manual.sensationSet(), extracted.sensations(), FIELD_SENSATIONS, fieldSources
-        );
-        List<Situation> situations = mergeMultiple(
-                manual.situationSet(), extracted.situations(), FIELD_SITUATIONS, fieldSources
-        );
+        List<Appearance> appearances = mergeMultiple(manual.appearanceSet(), extracted.appearances());
+        List<Sensation> sensations = mergeMultiple(manual.sensationSet(), extracted.sensations());
+        List<Situation> situations = mergeMultiple(manual.situationSet(), extracted.situations());
 
         // 부위 보충 설명은 사용자가 직접 쓰는 자유 문장이라 AI가 채우지 않는다.
         String otherAreasNote = trimToNull(manual.otherAreasNote());
-        fieldSources.put(
-                FIELD_OTHER_AREAS_NOTE,
-                otherAreasNote == null ? FieldSource.NONE : FieldSource.MANUAL
-        );
 
-        StructuredSelectionsResponse structured = StructuredSelectionsResponse.of(
+        StructuredSelectionsResponse proposed = StructuredSelectionsResponse.of(
                 primaryArea, otherAreasNote, appearances, sensations, situations, careAvailability
         );
-        OffsetDateTime interpretedAt = LocalDateTime.now(clock).atOffset(ZoneOffset.UTC);
+        List<MissingField> missingFields = missingFields(
+                primaryArea, appearances, sensations, situations, careAvailability
+        );
+
+        // AI 출력 스키마에 모호 표현을 담을 자리가 아직 없다. 명세가 요구하는 키는 채워 두고
+        // 내용은 AI 프롬프트 확장 뒤에 붙인다. 키가 없으면 프런트가 분기 자체를 못 짠다.
+        List<AmbiguityResponse> ambiguities = List.of();
 
         if (outcome.isSucceeded()) {
-            return ReportInterpretationResponse.succeeded(structured, fieldSources, interpretedAt);
+            return ReportInterpretationResponse.succeeded(proposed, missingFields, ambiguities);
         }
+        logInternalFailure(outcome);
         return ReportInterpretationResponse.failed(
-                outcome.failureCode(), structured, fieldSources, interpretedAt
+                InterpretationFailureCode.from(outcome.failureCode()),
+                proposed,
+                missingFields,
+                ambiguities
         );
+    }
+
+    /**
+     * 합친 뒤에도 비어 있는 항목을 모은다.
+     *
+     * <p>선언 순서가 곧 응답 순서다. 같은 입력에 항상 같은 응답이 나가야 프런트가 목록을 그대로
+     * 그릴 수 있다.
+     */
+    private List<MissingField> missingFields(
+            BodyArea primaryArea,
+            List<Appearance> appearances,
+            List<Sensation> sensations,
+            List<Situation> situations,
+            CareAvailability careAvailability
+    ) {
+        List<MissingField> missing = new ArrayList<>();
+        if (primaryArea == null) {
+            missing.add(MissingField.PRIMARY_AREA);
+        }
+        if (appearances.isEmpty()) {
+            missing.add(MissingField.APPEARANCES);
+        }
+        if (sensations.isEmpty()) {
+            missing.add(MissingField.SENSATIONS);
+        }
+        if (situations.isEmpty()) {
+            missing.add(MissingField.SITUATIONS);
+        }
+        if (careAvailability == null) {
+            missing.add(MissingField.CARE_AVAILABILITY);
+        }
+        return List.copyOf(missing);
+    }
+
+    /**
+     * 좁히기 전 실패 코드를 로그에만 남긴다.
+     *
+     * <p>응답에는 세 값만 나가므로 어느 단계에서 무엇이 어긋났는지는 여기서만 알 수 있다.
+     * requestId를 함께 적어 사용자가 신고한 응답과 로그를 이어 붙일 수 있게 한다.
+     */
+    private void logInternalFailure(StructuringOutcome outcome) {
+        log.warn(
+                "구조화에 실패했습니다. requestId={} internalCode={} responseCode={}",
+                currentRequestId(),
+                outcome.failureCode(),
+                InterpretationFailureCode.from(outcome.failureCode())
+        );
+    }
+
+    private String currentRequestId() {
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        if (attributes == null) {
+            return null;
+        }
+        Object requestId = attributes.getAttribute(
+                ProblemFactory.REQUEST_ID_ATTRIBUTE, RequestAttributes.SCOPE_REQUEST
+        );
+        return requestId instanceof String value ? value : null;
     }
 
     /**
@@ -145,18 +194,8 @@ public class ReportInterpretationService {
     }
 
     /** 사용자가 고른 값이 있으면 그것을 쓴다. 없을 때에만 AI 값을 쓴다. */
-    private <E extends Enum<E>> E mergeSingle(
-            E manualValue,
-            E extractedValue,
-            String field,
-            Map<String, FieldSource> fieldSources
-    ) {
-        if (manualValue != null) {
-            fieldSources.put(field, FieldSource.MANUAL);
-            return manualValue;
-        }
-        fieldSources.put(field, extractedValue == null ? FieldSource.NONE : FieldSource.AI);
-        return extractedValue;
+    private <E extends Enum<E>> E mergeSingle(E manualValue, E extractedValue) {
+        return manualValue != null ? manualValue : extractedValue;
     }
 
     /**
@@ -165,18 +204,8 @@ public class ReportInterpretationService {
      * <p>둘을 합치면 사용자가 일부러 뺀 값이 AI 값으로 되살아난다. 사용자가 하나라도 골랐으면
      * 그 목록이 사용자의 답이다.
      */
-    private <E extends Enum<E>> List<E> mergeMultiple(
-            Set<E> manualValues,
-            Set<E> extractedValues,
-            String field,
-            Map<String, FieldSource> fieldSources
-    ) {
-        if (!manualValues.isEmpty()) {
-            fieldSources.put(field, FieldSource.MANUAL);
-            return sorted(manualValues);
-        }
-        fieldSources.put(field, extractedValues.isEmpty() ? FieldSource.NONE : FieldSource.AI);
-        return sorted(extractedValues);
+    private <E extends Enum<E>> List<E> mergeMultiple(Set<E> manualValues, Set<E> extractedValues) {
+        return sorted(manualValues.isEmpty() ? extractedValues : manualValues);
     }
 
     /** 응답 순서를 enum 선언 순으로 고정한다. 같은 입력에 항상 같은 응답이 나가야 한다. */

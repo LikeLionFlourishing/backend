@@ -1,5 +1,6 @@
 package likelion.flourishing.domain.report.controller;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -11,14 +12,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
-import likelion.flourishing.domain.report.ai.AiFailureCode;
-import likelion.flourishing.domain.report.dto.response.FieldSource;
+import likelion.flourishing.domain.report.dto.response.InterpretationFailureCode;
+import likelion.flourishing.domain.report.dto.response.MissingField;
 import likelion.flourishing.domain.report.dto.response.ReportInterpretationResponse;
 import likelion.flourishing.domain.report.dto.response.StructuredSelectionsResponse;
 import likelion.flourishing.domain.report.entity.Appearance;
@@ -85,12 +83,16 @@ class ReportInterpretationControllerTest {
                         .with(authentication(authenticationToken())))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
-                .andExpect(jsonPath("$.processingStatus").value("SUCCEEDED"))
-                .andExpect(jsonPath("$.failureCode").doesNotExist())
-                .andExpect(jsonPath("$.structured.primaryArea").value("RIGHT_CHIN"))
-                .andExpect(jsonPath("$.structured.appearances[0]").value("APP_REDNESS"))
-                .andExpect(jsonPath("$.fieldSources.primaryArea").value("MANUAL"))
-                .andExpect(jsonPath("$.fieldSources.sensations").value("AI"));
+                .andExpect(jsonPath("$.processingStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.failureCode").value(nullValue()))
+                .andExpect(jsonPath("$.proposed.primaryArea").value("RIGHT_CHIN"))
+                .andExpect(jsonPath("$.proposed.appearances[0]").value("APP_REDNESS"))
+                .andExpect(jsonPath("$.missingFields").isEmpty())
+                .andExpect(jsonPath("$.ambiguities").isEmpty())
+                // 명세에 없는 키는 나가지 않아야 한다.
+                .andExpect(jsonPath("$.structured").doesNotExist())
+                .andExpect(jsonPath("$.fieldSources").doesNotExist())
+                .andExpect(jsonPath("$.interpretedAt").doesNotExist());
     }
 
     @Test
@@ -104,7 +106,8 @@ class ReportInterpretationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.processingStatus").value("FAILED"))
                 .andExpect(jsonPath("$.failureCode").value("AI_TIMEOUT"))
-                .andExpect(jsonPath("$.structured.primaryArea").value("RIGHT_CHIN"));
+                .andExpect(jsonPath("$.proposed.primaryArea").value("RIGHT_CHIN"))
+                .andExpect(jsonPath("$.missingFields[0]").value("CARE_AVAILABILITY"));
     }
 
     @Test
@@ -158,16 +161,19 @@ class ReportInterpretationControllerTest {
     }
 
     private ReportInterpretationResponse succeeded() {
-        return ReportInterpretationResponse.succeeded(structured(), fieldSources(), interpretedAt());
+        return ReportInterpretationResponse.succeeded(proposed(), List.of(), List.of());
     }
 
     private ReportInterpretationResponse failed() {
         return ReportInterpretationResponse.failed(
-                AiFailureCode.AI_TIMEOUT, structured(), fieldSources(), interpretedAt()
+                InterpretationFailureCode.AI_TIMEOUT,
+                proposed(),
+                List.of(MissingField.CARE_AVAILABILITY),
+                List.of()
         );
     }
 
-    private StructuredSelectionsResponse structured() {
+    private StructuredSelectionsResponse proposed() {
         return StructuredSelectionsResponse.of(
                 BodyArea.RIGHT_CHIN,
                 null,
@@ -176,21 +182,6 @@ class ReportInterpretationControllerTest {
                 List.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED
         );
-    }
-
-    private Map<String, FieldSource> fieldSources() {
-        return Map.of(
-                "primaryArea", FieldSource.MANUAL,
-                "otherAreasNote", FieldSource.NONE,
-                "appearances", FieldSource.MANUAL,
-                "sensations", FieldSource.AI,
-                "situations", FieldSource.AI,
-                "careAvailability", FieldSource.AI
-        );
-    }
-
-    private OffsetDateTime interpretedAt() {
-        return OffsetDateTime.of(2026, 8, 15, 3, 0, 0, 0, ZoneOffset.UTC);
     }
 
     private UsernamePasswordAuthenticationToken authenticationToken() {

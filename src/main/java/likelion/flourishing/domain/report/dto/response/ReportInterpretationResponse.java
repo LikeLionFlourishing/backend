@@ -1,20 +1,19 @@
 package likelion.flourishing.domain.report.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import java.time.OffsetDateTime;
-import java.util.Map;
-import likelion.flourishing.domain.report.ai.AiFailureCode;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * 구조화 응답.
+ * 한 문장 구조화 결과. 명세 ReportInterpretation 과 필드가 1:1로 대응한다.
  *
- * <p>실패해도 structured에는 사용자가 직접 고른 값이 담겨 나간다. 화면이 비어 버리면 사용자가
- * 처음부터 다시 고르게 되기 때문이다.
+ * <p>명세의 응답 스키마는 additionalProperties: false 라서 여기에 없는 값을 얹으면 계약 위반이다.
+ * 그래서 fieldSources(값의 출처)와 interpretedAt(처리 시각)은 담지 않는다.
  *
- * <p>failureCode는 실패했을 때만 값이 있다. 원문이나 모델 응답은 어디에도 담기지 않는다.
+ * <p>실패해도 proposed 는 항상 채워 보낸다. 사용자가 직접 고른 값은 AI 실패와 무관하게 살아 있어야
+ * 확인 화면이 빈 채로 열리지 않는다.
  */
 @Getter
 @JsonInclude(JsonInclude.Include.ALWAYS)
@@ -22,37 +21,37 @@ import lombok.Getter;
 public class ReportInterpretationResponse {
 
     private final ProcessingStatus processingStatus;
-    private final AiFailureCode failureCode;
-    private final StructuredSelectionsResponse structured;
-    private final Map<String, FieldSource> fieldSources;
-    private final OffsetDateTime interpretedAt;
+    private final StructuredSelectionsResponse proposed;
+    private final List<MissingField> missingFields;
+    private final List<AmbiguityResponse> ambiguities;
+    private final InterpretationFailureCode failureCode;
 
     public static ReportInterpretationResponse succeeded(
-            StructuredSelectionsResponse structured,
-            Map<String, FieldSource> fieldSources,
-            OffsetDateTime interpretedAt
+            StructuredSelectionsResponse proposed,
+            List<MissingField> missingFields,
+            List<AmbiguityResponse> ambiguities
     ) {
         return new ReportInterpretationResponse(
-                ProcessingStatus.SUCCEEDED,
-                null,
-                structured,
-                fieldSources,
-                interpretedAt
+                ProcessingStatus.SUCCESS,
+                proposed,
+                List.copyOf(missingFields),
+                List.copyOf(ambiguities),
+                null
         );
     }
 
     public static ReportInterpretationResponse failed(
-            AiFailureCode failureCode,
-            StructuredSelectionsResponse structured,
-            Map<String, FieldSource> fieldSources,
-            OffsetDateTime interpretedAt
+            InterpretationFailureCode failureCode,
+            StructuredSelectionsResponse proposed,
+            List<MissingField> missingFields,
+            List<AmbiguityResponse> ambiguities
     ) {
         return new ReportInterpretationResponse(
                 ProcessingStatus.FAILED,
-                failureCode,
-                structured,
-                fieldSources,
-                interpretedAt
+                proposed,
+                List.copyOf(missingFields),
+                List.copyOf(ambiguities),
+                failureCode
         );
     }
 }
