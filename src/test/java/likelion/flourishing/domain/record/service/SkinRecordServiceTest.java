@@ -188,7 +188,7 @@ class SkinRecordServiceTest {
         SkinReportDetailResponse response = skinRecordService.getRecord(principal(), FIRST_ID);
 
         assertThat(response.getRawText()).isEqualTo("오른쪽 턱이 빨갛고 따가워요.");
-        assertThat(response.getConfirmed().getAppearances()).containsExactly(Appearance.REDNESS);
+        assertThat(response.getConfirmed().getAppearances()).containsExactly(Appearance.APP_REDNESS);
         assertThat(response.getCareResult().getRuleVersion()).isEqualTo("2026-08-09-v1");
         assertThat(response.getCareResult().getDoToday()).containsExactly("미지근한 물로 씻기");
         assertThat(response.getFollowUp().getSkinChange()).isEqualTo(SkinChange.IMPROVED);
@@ -201,8 +201,8 @@ class SkinRecordServiceTest {
         when(report.getCreatedAt()).thenReturn(createdAt);
         when(report.getReportDate()).thenReturn(createdAt.toLocalDate());
         when(report.getPrimaryArea()).thenReturn(BodyArea.RIGHT_CHIN);
-        when(report.getAppearances()).thenReturn(EnumSet.of(Appearance.REDNESS));
-        when(report.getSensations()).thenReturn(EnumSet.of(Sensation.STINGING_BURNING));
+        when(report.getAppearances()).thenReturn(EnumSet.of(Appearance.APP_REDNESS));
+        when(report.getSensations()).thenReturn(EnumSet.of(Sensation.REDNESS));
         when(report.getSituations()).thenReturn(EnumSet.of(Situation.SHAVING));
         when(report.getResultType()).thenReturn(ResultType.SELF_CARE_GUIDE);
         when(report.getStatus()).thenReturn(ReportStatus.COMPLETED);

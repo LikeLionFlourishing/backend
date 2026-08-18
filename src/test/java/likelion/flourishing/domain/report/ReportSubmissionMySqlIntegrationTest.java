@@ -155,7 +155,7 @@ class ReportSubmissionMySqlIntegrationTest {
         assertThat(report.get("report_date")).hasToString(todayInSeoul().toString());
         assertThat(new String((byte[]) report.get("raw_text_encrypted"))).doesNotContain("턱");
 
-        assertThat(codesOf("report_appearances", "appearance_code", reportId)).containsExactly("REDNESS");
+        assertThat(codesOf("report_appearances", "appearance_code", reportId)).containsExactly("APP_REDNESS");
         assertThat(codesOf("report_pre_care_checks", "check_code", reportId)).containsExactly("NONE");
 
         Map<String, Object> careResult = queryOne("""
@@ -229,8 +229,8 @@ class ReportSubmissionMySqlIntegrationTest {
                 new ConfirmedSelectionsRequest(
                         BodyArea.LEFT_CHEEK,
                         null,
-                        List.of(Appearance.REDNESS),
-                        List.of(Sensation.STINGING_BURNING),
+                        List.of(Appearance.APP_REDNESS),
+                        List.of(Sensation.REDNESS),
                         List.of(Situation.SHAVING),
                         CareAvailability.ALREADY_WASHED
                 ),
@@ -504,8 +504,8 @@ class ReportSubmissionMySqlIntegrationTest {
                 new ConfirmedSelectionsRequest(
                         BodyArea.RIGHT_CHIN,
                         null,
-                        List.of(Appearance.REDNESS),
-                        List.of(Sensation.STINGING_BURNING),
+                        List.of(Appearance.APP_REDNESS),
+                        List.of(Sensation.REDNESS),
                         List.of(Situation.SHAVING),
                         CareAvailability.ALREADY_WASHED
                 ),
@@ -519,8 +519,8 @@ class ReportSubmissionMySqlIntegrationTest {
                 new ConfirmedSelectionsRequest(
                         BodyArea.RIGHT_CHIN,
                         null,
-                        List.of(Appearance.REDNESS),
-                        List.of(Sensation.PAIN_AT_REST),
+                        List.of(Appearance.APP_REDNESS),
+                        List.of(Sensation.BREAKOUT),
                         List.of(Situation.SHAVING),
                         CareAvailability.ALREADY_WASHED
                 ),
@@ -629,7 +629,7 @@ class ReportSubmissionMySqlIntegrationTest {
         insertRuleVersion(STATE_VERSION_ID, STATE_RULE_ID, "붉음이 있을 때 적용", STATE_FALLBACK, 200);
         insertRuleVersion(SAFETY_VERSION_ID, SAFETY_RULE_ID, "위험 신호가 있을 때 적용", CLINICIAN_MESSAGE, 10);
 
-        insertCondition(STATE_VERSION_ID, "appearances", "CONTAINS", "REDNESS");
+        insertCondition(STATE_VERSION_ID, "appearances", "CONTAINS", "APP_REDNESS");
         insertCondition(SAFETY_VERSION_ID, "preCareChecks", "NOT_EQUALS", "NONE");
 
         insertAction(COMMON_VERSION_ID, "DO_TODAY", "미지근한 물로 씻기", 100, 1);

@@ -61,17 +61,17 @@ public class SimilarExperienceScorer {
             score += PRIMARY_AREA_SCORE;
         }
         score += capped(
-                overlapCount(query.appearances(), candidate.getAppearances(), Appearance.UNSURE),
+                overlapCount(query.appearances(), candidate.getAppearances()),
                 APPEARANCE_SCORE_PER_MATCH,
                 APPEARANCE_SCORE_CAP
         );
         score += capped(
-                overlapCount(query.sensations(), candidate.getSensations(), Sensation.NONE),
+                overlapCount(query.sensations(), candidate.getSensations()),
                 SENSATION_SCORE_PER_MATCH,
                 SENSATION_SCORE_CAP
         );
         score += capped(
-                overlapCount(query.situations(), candidate.getSituations(), Situation.NONE_RECALLED),
+                overlapCountIgnoring(query.situations(), candidate.getSituations(), Situation.NONE_RECALLED),
                 SITUATION_SCORE_PER_MATCH,
                 SITUATION_SCORE_CAP
         );
@@ -81,7 +81,25 @@ public class SimilarExperienceScorer {
         return score;
     }
 
-    private <E extends Enum<E>> int overlapCount(Set<E> current, Set<E> candidate, E ignored) {
+    /**
+     * 두 집합에 함께 있는 값의 수.
+     *
+     * <p>겉모습과 느껴지는 불편이 이 형태를 쓴다. 명세 v2_1에서 두 그룹의 "모름/없음" 값이
+     * 사라져 점수에서 걸러 낼 대상이 없어졌다.
+     */
+    private <E extends Enum<E>> int overlapCount(Set<E> current, Set<E> candidate) {
+        return (int) current.stream()
+                .filter(candidate::contains)
+                .count();
+    }
+
+    /**
+     * 지정한 값을 뺀 겹침 수.
+     *
+     * <p>직전 상황의 NONE_RECALLED 를 위해 남겨 둔다. 둘 다 "떠오르는 상황이 없다"고 답한 것은
+     * 같은 상황을 겪었다는 뜻이 아니라 둘 다 단서가 없다는 뜻이라, 유사 신호로 세지 않는다.
+     */
+    private <E extends Enum<E>> int overlapCountIgnoring(Set<E> current, Set<E> candidate, E ignored) {
         return (int) current.stream()
                 .filter(value -> value != ignored)
                 .filter(candidate::contains)

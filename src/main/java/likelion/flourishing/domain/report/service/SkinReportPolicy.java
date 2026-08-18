@@ -66,18 +66,19 @@ public final class SkinReportPolicy {
     /**
      * 함께 고를 수 없는 조합을 막는다.
      *
-     * <p>"모름", "없음", "기억나는 게 없음"은 다른 값과 같이 올 수 없다. 모른다면서 무엇을 봤다고
-     * 하는 답은 규칙 판단에서 서로 반대 방향으로 작용해 결과를 뒤집는다. DDL은 행 단위 CHECK만
-     * 걸 수 있어 이 조합은 서비스가 지킨다.
+     * <p>"기억나는 게 없음"과 "해당하는 변화가 없음"은 다른 값과 같이 올 수 없다. 없다면서
+     * 무엇이 있었다고 하는 답은 규칙 판단에서 서로 반대 방향으로 작용해 결과를 뒤집는다.
+     * DDL은 행 단위 CHECK만 걸 수 있어 이 조합은 서비스가 지킨다.
+     *
+     * <p>겉모습과 느껴지는 불편은 받지 않는다. 명세 v2_1이 두 그룹에서 단독 선택 개념을
+     * 걷어냈기 때문이다. AppearanceSelection 과 SensationSelection 에는 not/allOf 제약이 없고,
+     * 짝이 되던 값(v1의 Appearance.UNSURE, Sensation.NONE)도 사라졌다. 남은 값끼리는 서로
+     * 모순되지 않는다. "붉어짐"과 "기타"를 함께 고르는 것은 이상하지 않다.
      */
     public static void assertExclusiveSelections(
-            Set<Appearance> appearances,
-            Set<Sensation> sensations,
             Set<Situation> situations,
             Set<PreCareCheck> preCareChecks
     ) {
-        assertExclusive(appearances, Appearance.UNSURE);
-        assertExclusive(sensations, Sensation.NONE);
         assertExclusive(situations, Situation.NONE_RECALLED);
         assertExclusive(preCareChecks, PreCareCheck.NONE);
     }

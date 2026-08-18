@@ -75,8 +75,8 @@ class HomeServiceTest {
         when(homeReportQueryRepository.findOldestPendingFollowUp(any(), any())).thenReturn(Optional.empty());
         when(homeReportQueryRepository.findMostRecentReport(any())).thenReturn(Optional.empty());
         when(dailyCheckInRepository.findByUserIdAndCheckInDate(any(), any())).thenReturn(Optional.empty());
-        when(homeReportQueryRepository.findAppearanceCodes(any())).thenReturn(List.of("REDNESS"));
-        when(homeReportQueryRepository.findSensationCodes(any())).thenReturn(List.of("ITCHING"));
+        when(homeReportQueryRepository.findAppearanceCodes(any())).thenReturn(List.of("APP_REDNESS"));
+        when(homeReportQueryRepository.findSensationCodes(any())).thenReturn(List.of("BREAKOUT"));
         when(homeReportQueryRepository.findSituationCodes(any())).thenReturn(List.of("SHAVING"));
     }
 
@@ -131,7 +131,7 @@ class HomeServiceTest {
         HomeResponse response = homeService.getHome(principal());
 
         assertThat(response.getPriority()).isEqualTo(HomePriority.RECENT_RECORD);
-        assertThat(response.getRecentReport().getAppearances()).containsExactly("REDNESS");
+        assertThat(response.getRecentReport().getAppearances()).containsExactly("APP_REDNESS");
         assertThat(response.getRecentReport().getSkinChange()).isNull();
     }
 

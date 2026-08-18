@@ -30,61 +30,69 @@ class SimilarExperienceScorerTest {
     @Test
     void sameAreaAndAppearancesReachThreshold() {
         SimilarExperienceQuery query = query(
-                BodyArea.RIGHT_CHIN, Set.of(Appearance.REDNESS), Set.of(Sensation.NONE), Set.of(Situation.SHAVING)
+                BodyArea.RIGHT_CHIN, Set.of(Appearance.APP_REDNESS), Set.of(Sensation.EXCESS_SEBUM), Set.of(Situation.SHAVING)
         );
         SkinReport candidate = report(
-                BodyArea.RIGHT_CHIN, Set.of(Appearance.REDNESS), Set.of(Sensation.NONE), Set.of(Situation.SHAVING)
+                BodyArea.RIGHT_CHIN, Set.of(Appearance.APP_REDNESS), Set.of(Sensation.EXCESS_SEBUM), Set.of(Situation.SHAVING)
         );
 
-        // 부위 3 + 겉모습 2 + 직전 상황 1 + 결과 유형 1 = 7
-        assertThat(scorer.score(query, candidate)).isEqualTo(7);
+        // 부위 3 + 겉모습 2 + 불편 1 + 직전 상황 1 + 결과 유형 1 = 8
+        // 명세 v2_1 전에는 불편이 NONE이라 점수에서 빠져 7이었다. 이제 NONE이 없어 함께 센다.
+        assertThat(scorer.score(query, candidate)).isEqualTo(8);
     }
 
     @Test
     void appearanceScoreIsCapped() {
         Set<Appearance> manyAppearances = Set.of(
-                Appearance.REDNESS,
-                Appearance.SMALL_BUMPS,
-                Appearance.WHITE_TIPPED_BUMPS,
-                Appearance.ROUGHNESS_FLAKING
+                Appearance.APP_REDNESS,
+                Appearance.APP_BUMP,
+                Appearance.APP_PUS_BUMP,
+                Appearance.APP_DRYNESS
         );
         SimilarExperienceQuery query = query(
-                BodyArea.NOSE, manyAppearances, Set.of(Sensation.NONE), Set.of(Situation.NONE_RECALLED)
+                BodyArea.NOSE, manyAppearances, Set.of(Sensation.EXCESS_SEBUM), Set.of(Situation.NONE_RECALLED)
         );
         SkinReport candidate = report(
-                BodyArea.NOSE, manyAppearances, Set.of(Sensation.NONE), Set.of(Situation.NONE_RECALLED)
+                BodyArea.NOSE, manyAppearances, Set.of(Sensation.EXCESS_SEBUM), Set.of(Situation.NONE_RECALLED)
         );
 
-        // 부위 3 + 겉모습 상한 4 + 결과 유형 1 = 8. 겉모습 네 개가 8점이 되지 않는다.
-        assertThat(scorer.score(query, candidate)).isEqualTo(8);
+        // 부위 3 + 겉모습 상한 4 + 불편 1 + 결과 유형 1 = 9. 겉모습 네 개가 8점이 되지 않는다.
+        assertThat(scorer.score(query, candidate)).isEqualTo(9);
     }
 
+    /**
+     * 직전 상황의 NONE_RECALLED만 점수에서 빠진다.
+     *
+     * <p>둘 다 "떠오르는 상황이 없다"고 답한 것은 같은 상황을 겪었다는 뜻이 아니라 둘 다 단서가
+     * 없다는 뜻이라 유사 신호로 세지 않는다. 겉모습과 느껴지는 불편에는 명세 v2_1에서 그런 값이
+     * 사라져, 겹치면 그대로 점수가 된다.
+     */
     @Test
-    void unsureAndNoneOverlapEarnNoScore() {
+    void onlyNoneRecalledSituationEarnsNoScore() {
         SimilarExperienceQuery query = query(
                 BodyArea.NECK,
-                Set.of(Appearance.UNSURE),
-                Set.of(Sensation.NONE),
+                Set.of(Appearance.APP_OTHER),
+                Set.of(Sensation.EXCESS_SEBUM),
                 Set.of(Situation.NONE_RECALLED)
         );
         SkinReport candidate = report(
                 BodyArea.LEFT_CHEEK,
-                Set.of(Appearance.UNSURE),
-                Set.of(Sensation.NONE),
+                Set.of(Appearance.APP_OTHER),
+                Set.of(Sensation.EXCESS_SEBUM),
                 Set.of(Situation.NONE_RECALLED)
         );
 
-        // 부위가 다르고 겹치는 값은 모두 배타 선택이라 결과 유형 1점만 남는다.
-        assertThat(scorer.score(query, candidate)).isEqualTo(1);
+        // 부위가 다르고 상황은 NONE_RECALLED라 빠진다. 겉모습 2 + 불편 1 + 결과 유형 1 = 4
+        assertThat(scorer.score(query, candidate)).isEqualTo(4);
     }
 
     @Test
     void candidatesBelowMinimumScoreAreNotRanked() {
         SimilarExperienceQuery query = query(
-                BodyArea.NECK, Set.of(Appearance.REDNESS), Set.of(Sensation.ITCHING), Set.of(Situation.SHAVING)
+                BodyArea.NECK, Set.of(Appearance.APP_REDNESS), Set.of(Sensation.BREAKOUT), Set.of(Situation.SHAVING)
         );
         SkinReport weakCandidate = report(
-                BodyArea.NOSE, Set.of(Appearance.CRUST), Set.of(Sensation.HEAT), Set.of(Situation.NEW_PRODUCT)
+                BodyArea.NOSE, Set.of(Appearance.APP_OTHER), Set.of(Sensation.REDNESS), Set.of(Situation.NEW_PRODUCT)
         );
 
         assertThat(scorer.rank(query, List.of(weakCandidate))).isEmpty();
@@ -94,20 +102,20 @@ class SimilarExperienceScorerTest {
     void higherScoreWinsAndTiesKeepGivenOrder() {
         SimilarExperienceQuery query = query(
                 BodyArea.RIGHT_CHIN,
-                Set.of(Appearance.REDNESS, Appearance.SMALL_BUMPS),
-                Set.of(Sensation.ITCHING),
+                Set.of(Appearance.APP_REDNESS, Appearance.APP_BUMP),
+                Set.of(Sensation.BREAKOUT),
                 Set.of(Situation.SHAVING)
         );
         SkinReport recentTie = report(
-                BodyArea.RIGHT_CHIN, Set.of(Appearance.REDNESS), Set.of(Sensation.ITCHING), Set.of(Situation.SHAVING)
+                BodyArea.RIGHT_CHIN, Set.of(Appearance.APP_REDNESS), Set.of(Sensation.BREAKOUT), Set.of(Situation.SHAVING)
         );
         SkinReport olderTie = report(
-                BodyArea.RIGHT_CHIN, Set.of(Appearance.REDNESS), Set.of(Sensation.ITCHING), Set.of(Situation.SHAVING)
+                BodyArea.RIGHT_CHIN, Set.of(Appearance.APP_REDNESS), Set.of(Sensation.BREAKOUT), Set.of(Situation.SHAVING)
         );
         SkinReport best = report(
                 BodyArea.RIGHT_CHIN,
-                Set.of(Appearance.REDNESS, Appearance.SMALL_BUMPS),
-                Set.of(Sensation.ITCHING),
+                Set.of(Appearance.APP_REDNESS, Appearance.APP_BUMP),
+                Set.of(Sensation.BREAKOUT),
                 Set.of(Situation.SHAVING)
         );
 

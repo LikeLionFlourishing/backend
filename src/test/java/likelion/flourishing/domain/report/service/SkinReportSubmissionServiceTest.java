@@ -246,9 +246,10 @@ class SkinReportSubmissionServiceTest {
                 new ConfirmedSelectionsRequest(
                         BodyArea.RIGHT_CHIN,
                         null,
-                        List.of(Appearance.REDNESS),
-                        List.of(Sensation.NONE, Sensation.ITCHING),
-                        List.of(Situation.SHAVING),
+                        List.of(Appearance.APP_REDNESS),
+                        List.of(Sensation.EXCESS_SEBUM, Sensation.BREAKOUT),
+                        // 단독 선택 위반이 남은 그룹은 직전 상황과 관리 전 확인뿐이다.
+                        List.of(Situation.NONE_RECALLED, Situation.SHAVING),
                         CareAvailability.ALREADY_WASHED
                 ),
                 List.of(PreCareCheck.NONE)
@@ -344,8 +345,8 @@ class SkinReportSubmissionServiceTest {
                 new ConfirmedSelectionsRequest(
                         BodyArea.RIGHT_CHIN,
                         null,
-                        List.of(Appearance.REDNESS),
-                        List.of(Sensation.STINGING_BURNING),
+                        List.of(Appearance.APP_REDNESS),
+                        List.of(Sensation.REDNESS),
                         List.of(Situation.SHAVING),
                         CareAvailability.ALREADY_WASHED
                 ),

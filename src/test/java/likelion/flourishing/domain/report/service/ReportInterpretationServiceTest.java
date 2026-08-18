@@ -100,15 +100,15 @@ class ReportInterpretationServiceTest {
     void manualSelectionWinsOverExtractedValue() {
         stubExtracted(new ExtractedSelections(
                 BodyArea.NOSE,
-                Set.of(Appearance.CRUST),
-                Set.of(Sensation.HEAT),
+                Set.of(Appearance.APP_OTHER),
+                Set.of(Sensation.REDNESS),
                 Set.of(Situation.NEW_PRODUCT),
                 CareAvailability.ADDITIONAL_CARE_DIFFICULT
         ));
         ManualSelectionsRequest manual = new ManualSelectionsRequest(
                 BodyArea.RIGHT_CHIN,
                 "왼쪽 목에도 조금 있어요",
-                List.of(Appearance.REDNESS),
+                List.of(Appearance.APP_REDNESS),
                 null,
                 null,
                 null
@@ -120,7 +120,7 @@ class ReportInterpretationServiceTest {
 
         assertThat(response.getProcessingStatus()).isEqualTo(ProcessingStatus.SUCCEEDED);
         assertThat(response.getStructured().getPrimaryArea()).isEqualTo(BodyArea.RIGHT_CHIN);
-        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.REDNESS);
+        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.APP_REDNESS);
         assertThat(response.getStructured().getOtherAreasNote()).isEqualTo("왼쪽 목에도 조금 있어요");
         assertThat(response.getFieldSources())
                 .containsEntry("primaryArea", FieldSource.MANUAL)
@@ -129,7 +129,7 @@ class ReportInterpretationServiceTest {
                 .containsEntry("sensations", FieldSource.AI)
                 .containsEntry("situations", FieldSource.AI)
                 .containsEntry("careAvailability", FieldSource.AI);
-        assertThat(response.getStructured().getSensations()).containsExactly(Sensation.HEAT);
+        assertThat(response.getStructured().getSensations()).containsExactly(Sensation.REDNESS);
         assertThat(response.getInterpretedAt())
                 .isEqualTo(LocalDateTime.ofInstant(NOW, ZoneOffset.UTC).atOffset(ZoneOffset.UTC));
     }
@@ -139,20 +139,20 @@ class ReportInterpretationServiceTest {
     void manualListReplacesExtractedListInsteadOfMerging() {
         stubExtracted(new ExtractedSelections(
                 null,
-                Set.of(Appearance.REDNESS, Appearance.OOZING),
+                Set.of(Appearance.APP_REDNESS, Appearance.APP_PUS_BUMP),
                 Set.of(),
                 Set.of(),
                 null
         ));
         ManualSelectionsRequest manual = new ManualSelectionsRequest(
-                null, null, List.of(Appearance.REDNESS), null, null, null
+                null, null, List.of(Appearance.APP_REDNESS), null, null, null
         );
 
         ReportInterpretationResponse response = service.interpret(
                 principal(), new ReportInterpretationRequest("턱이 빨개요.", manual)
         );
 
-        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.REDNESS);
+        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.APP_REDNESS);
     }
 
     @Test
@@ -160,7 +160,7 @@ class ReportInterpretationServiceTest {
         when(structuringPort.structure(anyString()))
                 .thenReturn(StructuringOutcome.failed(AiFailureCode.AI_TIMEOUT));
         ManualSelectionsRequest manual = new ManualSelectionsRequest(
-                BodyArea.NECK, null, List.of(Appearance.UNSURE), null, null, null
+                BodyArea.NECK, null, List.of(Appearance.APP_OTHER), null, null, null
         );
 
         ReportInterpretationResponse response = service.interpret(
@@ -170,7 +170,7 @@ class ReportInterpretationServiceTest {
         assertThat(response.getProcessingStatus()).isEqualTo(ProcessingStatus.FAILED);
         assertThat(response.getFailureCode()).isEqualTo(AiFailureCode.AI_TIMEOUT);
         assertThat(response.getStructured().getPrimaryArea()).isEqualTo(BodyArea.NECK);
-        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.UNSURE);
+        assertThat(response.getStructured().getAppearances()).containsExactly(Appearance.APP_OTHER);
         assertThat(response.getFieldSources())
                 .containsEntry("primaryArea", FieldSource.MANUAL)
                 .containsEntry("sensations", FieldSource.NONE);
@@ -191,10 +191,12 @@ class ReportInterpretationServiceTest {
                 .containsEntry("otherAreasNote", FieldSource.NONE);
     }
 
+    /** 단독 선택 위반이 남은 그룹은 직전 상황뿐이다. 겉모습·불편은 어떤 조합이든 통과한다. */
     @Test
     void invalidManualCombinationIsRejectedBeforeCallingTheModel() {
         ManualSelectionsRequest manual = new ManualSelectionsRequest(
-                null, null, List.of(Appearance.UNSURE, Appearance.REDNESS), null, null, null
+                null, null, null, null,
+                List.of(Situation.NONE_RECALLED, Situation.SHAVING), null
         );
 
         assertThatThrownBy(() -> service.interpret(

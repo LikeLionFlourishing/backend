@@ -55,7 +55,7 @@ class CareRuleEngineTest {
     @Test
     void stateRuleIsSkippedWhenAppearanceIsAbsent() {
         RuleEvaluationFacts withoutRedness = facts(
-                Set.of(Appearance.CRUST), Set.of(Sensation.NONE), Set.of(PreCareCheck.NONE)
+                Set.of(Appearance.APP_OTHER), Set.of(Sensation.EXCESS_SEBUM), Set.of(PreCareCheck.NONE)
         );
 
         List<CareRuleSnapshot> matched = engine.match(
@@ -68,11 +68,11 @@ class CareRuleEngineTest {
     @Test
     void conditionsInOneGroupMustAllHold() {
         CareRuleSnapshot rule = ruleWith(List.of(
-                condition(1, RuleConditionField.APPEARANCES, RuleOperator.CONTAINS, Appearance.REDNESS.name()),
-                condition(1, RuleConditionField.SENSATIONS, RuleOperator.CONTAINS, Sensation.ITCHING.name())
+                condition(1, RuleConditionField.APPEARANCES, RuleOperator.CONTAINS, Appearance.APP_REDNESS.name()),
+                condition(1, RuleConditionField.SENSATIONS, RuleOperator.CONTAINS, Sensation.BREAKOUT.name())
         ));
         RuleEvaluationFacts onlyRedness = facts(
-                Set.of(Appearance.REDNESS), Set.of(Sensation.HEAT), Set.of(PreCareCheck.NONE)
+                Set.of(Appearance.APP_REDNESS), Set.of(Sensation.REDNESS), Set.of(PreCareCheck.NONE)
         );
 
         assertThat(engine.match(CareRuleFixtures.activeCatalog(rule), onlyRedness)).isEmpty();
@@ -81,11 +81,11 @@ class CareRuleEngineTest {
     @Test
     void separateGroupsBehaveAsAlternatives() {
         CareRuleSnapshot rule = ruleWith(List.of(
-                condition(1, RuleConditionField.APPEARANCES, RuleOperator.CONTAINS, Appearance.OOZING.name()),
-                condition(2, RuleConditionField.SENSATIONS, RuleOperator.CONTAINS, Sensation.HEAT.name())
+                condition(1, RuleConditionField.APPEARANCES, RuleOperator.CONTAINS, Appearance.APP_PUS_BUMP.name()),
+                condition(2, RuleConditionField.SENSATIONS, RuleOperator.CONTAINS, Sensation.REDNESS.name())
         ));
         RuleEvaluationFacts secondGroupOnly = facts(
-                Set.of(Appearance.REDNESS), Set.of(Sensation.HEAT), Set.of(PreCareCheck.NONE)
+                Set.of(Appearance.APP_REDNESS), Set.of(Sensation.REDNESS), Set.of(PreCareCheck.NONE)
         );
 
         assertThat(engine.match(CareRuleFixtures.activeCatalog(rule), secondGroupOnly)).hasSize(1);
@@ -119,7 +119,7 @@ class CareRuleEngineTest {
     @Test
     void negatedFlipsTheConditionResult() {
         CareRuleSnapshot rule = ruleWith(List.of(new RuleConditionSpec(
-                1, RuleConditionField.APPEARANCES, RuleOperator.CONTAINS, Appearance.REDNESS.name(), true
+                1, RuleConditionField.APPEARANCES, RuleOperator.CONTAINS, Appearance.APP_REDNESS.name(), true
         )));
 
         assertThat(engine.match(CareRuleFixtures.activeCatalog(rule), CareRuleFixtures.selfCareFacts()))
@@ -133,8 +133,8 @@ class CareRuleEngineTest {
         )));
         RuleEvaluationFacts withHistory = new RuleEvaluationFacts(
                 BodyArea.RIGHT_CHIN,
-                Set.of(Appearance.REDNESS),
-                Set.of(Sensation.NONE),
+                Set.of(Appearance.APP_REDNESS),
+                Set.of(Sensation.EXCESS_SEBUM),
                 Set.of(Situation.NONE_RECALLED),
                 CareAvailability.ALREADY_WASHED,
                 Set.of(PreCareCheck.NONE),

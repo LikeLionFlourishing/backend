@@ -49,8 +49,8 @@ class OpenAiSkinReportStructuringTest {
         stubPayload("""
                 {
                   "primaryArea": "RIGHT_CHIN",
-                  "appearances": ["REDNESS", "SMALL_BUMPS"],
-                  "sensations": ["STINGING_BURNING"],
+                  "appearances": ["APP_REDNESS", "APP_BUMP"],
+                  "sensations": ["REDNESS"],
                   "situations": ["SHAVING"],
                   "careAvailability": "ALREADY_WASHED"
                 }
@@ -61,8 +61,8 @@ class OpenAiSkinReportStructuringTest {
         assertThat(outcome.isSucceeded()).isTrue();
         assertThat(outcome.extracted().primaryArea()).isEqualTo(BodyArea.RIGHT_CHIN);
         assertThat(outcome.extracted().appearances())
-                .containsExactlyInAnyOrder(Appearance.REDNESS, Appearance.SMALL_BUMPS);
-        assertThat(outcome.extracted().sensations()).containsExactly(Sensation.STINGING_BURNING);
+                .containsExactlyInAnyOrder(Appearance.APP_REDNESS, Appearance.APP_BUMP);
+        assertThat(outcome.extracted().sensations()).containsExactly(Sensation.REDNESS);
         assertThat(outcome.extracted().situations()).containsExactly(Situation.SHAVING);
         assertThat(outcome.extracted().careAvailability()).isEqualTo(CareAvailability.ALREADY_WASHED);
     }
@@ -106,22 +106,30 @@ class OpenAiSkinReportStructuringTest {
         assertThat(outcome.extracted().appearances()).isEmpty();
     }
 
+    /**
+     * 단독 선택 값이 다른 값과 함께 오면 뺀다. 명세 v2_1에서 그런 값이 남은 그룹은 직전 상황뿐이다.
+     *
+     * <p>겉모습과 느껴지는 불편에는 "모름/없음"이 사라져 모순 조합 자체가 생기지 않으므로,
+     * 모델이 여러 값을 주면 그대로 받는다.
+     */
     @Test
-    void exclusiveValueIsDroppedWhenOtherValuesArePresent() {
+    void exclusiveSituationIsDroppedWhenOtherValuesArePresent() {
         stubPayload("""
                 {
                   "primaryArea": "NOSE",
-                  "appearances": ["UNSURE", "REDNESS"],
-                  "sensations": ["NONE", "ITCHING"],
+                  "appearances": ["APP_REDNESS", "APP_OTHER"],
+                  "sensations": ["REDNESS", "BREAKOUT"],
                   "situations": ["NONE_RECALLED", "SHAVING"],
                   "careAvailability": "ALREADY_WASHED"
                 }
                 """);
 
-        StructuringOutcome outcome = structuring.structure("코가 빨갛고 간지러운데 확실하진 않아요.");
+        StructuringOutcome outcome = structuring.structure("코가 빨갛고 트러블이 났어요.");
 
-        assertThat(outcome.extracted().appearances()).containsExactly(Appearance.REDNESS);
-        assertThat(outcome.extracted().sensations()).containsExactly(Sensation.ITCHING);
+        assertThat(outcome.extracted().appearances())
+                .containsExactlyInAnyOrder(Appearance.APP_REDNESS, Appearance.APP_OTHER);
+        assertThat(outcome.extracted().sensations())
+                .containsExactlyInAnyOrder(Sensation.REDNESS, Sensation.BREAKOUT);
         assertThat(outcome.extracted().situations()).containsExactly(Situation.SHAVING);
     }
 
