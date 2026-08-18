@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.util.UUID;
+import likelion.flourishing.support.UuidV7;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -37,4 +38,38 @@ public class CareResultItem {
 
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
+
+    private CareResultItem(
+            UUID careResultId,
+            UUID sourceRuleActionId,
+            CareResultItemType itemType,
+            String contentSnapshot,
+            int displayOrder
+    ) {
+        this.id = UuidV7.generate();
+        this.careResultId = careResultId;
+        this.sourceRuleActionId = sourceRuleActionId;
+        this.itemType = itemType;
+        this.contentSnapshot = contentSnapshot;
+        this.displayOrder = displayOrder;
+    }
+
+    /**
+     * 표시한 문구를 그대로 복사해 남긴다.
+     *
+     * @param sourceRuleActionId 문구가 온 규칙 행동. 행동이 지워지면 NULL이 되지만 문구는 남는다.
+     * @param displayOrder       1 또는 2. DDL이 유형별 최대 두 개로 제한한다.
+     */
+    public static CareResultItem snapshot(
+            UUID careResultId,
+            UUID sourceRuleActionId,
+            CareResultItemType itemType,
+            String contentSnapshot,
+            int displayOrder
+    ) {
+        if (displayOrder < 1 || displayOrder > 2) {
+            throw new IllegalArgumentException("결과 항목은 유형별로 두 개까지만 저장할 수 있습니다.");
+        }
+        return new CareResultItem(careResultId, sourceRuleActionId, itemType, contentSnapshot, displayOrder);
+    }
 }

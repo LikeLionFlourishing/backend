@@ -105,6 +105,42 @@ public enum ErrorCode {
             "이미 저장된 경과",
             "이미 저장한 경과는 다른 내용으로 바꿀 수 없습니다."
     ),
+    CONSENT_REQUIRED(
+            HttpStatus.FORBIDDEN,
+            "CONSENT_REQUIRED",
+            "동의 필요",
+            "민감정보 동의를 완료해야 이용할 수 있습니다."
+    ),
+    SELECTION_COMBINATION_INVALID(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "SELECTION_COMBINATION_INVALID",
+            "선택값 조합 오류",
+            "함께 고를 수 없는 선택값이 있습니다."
+    ),
+    REPORT_ALREADY_EXISTS(
+            HttpStatus.CONFLICT,
+            "REPORT_ALREADY_EXISTS",
+            "이미 저장된 보고",
+            "같은 날짜의 피부 보고는 하루 한 번만 저장할 수 있습니다."
+    ),
+    IDEMPOTENCY_KEY_REUSED(
+            HttpStatus.CONFLICT,
+            "IDEMPOTENCY_KEY_REUSED",
+            "멱등성 키 재사용",
+            "같은 키를 다른 요청에 다시 쓸 수 없습니다."
+    ),
+    AI_RETRY_NOT_AVAILABLE(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "AI_RETRY_NOT_AVAILABLE",
+            "재생성할 수 없는 결과",
+            "이 결과는 관리 설명을 다시 만들 수 없습니다."
+    ),
+    AI_RETRY_ALREADY_USED(
+            HttpStatus.CONFLICT,
+            "AI_RETRY_ALREADY_USED",
+            "재생성 횟수 초과",
+            "관리 설명 재생성은 한 번만 할 수 있습니다."
+    ),
     CONSENT_VERSION_NOT_ACCEPTED(
             HttpStatus.UNPROCESSABLE_ENTITY,
             "CONSENT_VERSION_NOT_ACCEPTED",
@@ -132,6 +168,18 @@ public enum ErrorCode {
     RATE_LIMIT_UNAVAILABLE(
             HttpStatus.SERVICE_UNAVAILABLE,
             "RATE_LIMIT_UNAVAILABLE",
+            "일시적으로 처리할 수 없음",
+            "요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."
+    ),
+    RULE_ENGINE_UNAVAILABLE(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "RULE_ENGINE_UNAVAILABLE",
+            "관리 규칙 준비 중",
+            "관리 기준을 확인할 수 없어 결과를 만들지 못했습니다. 잠시 후 다시 시도해 주세요."
+    ),
+    SERVICE_UNAVAILABLE(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "SERVICE_UNAVAILABLE",
             "일시적으로 처리할 수 없음",
             "요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."
     );

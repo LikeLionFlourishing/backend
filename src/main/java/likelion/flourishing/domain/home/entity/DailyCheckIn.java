@@ -58,6 +58,27 @@ public class DailyCheckIn extends BaseTimeEntity {
         return new DailyCheckIn(UuidV7.generate(), userId, checkInDate);
     }
 
+    /** 같은 날 피부 보고가 확정됐을 때 쓴다. 그날 기록이 아직 없던 경우다. */
+    public static DailyCheckIn skinReport(UUID userId, LocalDate checkInDate, UUID reportId) {
+        DailyCheckIn checkIn = new DailyCheckIn(UuidV7.generate(), userId, checkInDate);
+        checkIn.replaceWithSkinReport(reportId);
+        return checkIn;
+    }
+
+    /**
+     * "오늘 불편 없음"으로 남긴 기록을 피부 보고로 바꾼다.
+     *
+     * <p>불편이 없다고 답한 뒤 같은 날 보고를 하면 나중에 확정한 보고가 그날의 상태다.
+     * 반대 방향은 열지 않는다. 보고를 지우지 않는 한 되돌릴 일이 없다.
+     */
+    public void replaceWithSkinReport(UUID reportId) {
+        if (reportId == null) {
+            throw new IllegalArgumentException("피부 보고 상태에는 보고 식별자가 있어야 합니다.");
+        }
+        this.state = CheckInState.SKIN_REPORT;
+        this.reportId = reportId;
+    }
+
     public boolean isNoDiscomfort() {
         return state == CheckInState.NO_DISCOMFORT;
     }

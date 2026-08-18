@@ -52,6 +52,19 @@ openssl ec -in vapid.pem -outform DER \
 
 `VAPID_SUBJECT`에는 push 서비스가 연락할 수 있는 `mailto:` 또는 `https:` URI를 넣습니다.
 
+AI 구조화와 관리 설명 생성을 실제로 쓰려면 `OPENAI_API_KEY`와 `OPENAI_MODEL`이 필요합니다.
+구조화 응답(`text.format.type = json_schema`, `strict: true`)을 지원하는 모델을 지정합니다.
+
+```bash
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+키나 모델이 비어 있어도 애플리케이션은 정상 기동합니다. 이때 구조화 API는
+`processingStatus: FAILED`와 사용자가 직접 고른 값을 돌려주고, 관리 결과는 승인된 규칙의
+대체 문구로 저장됩니다. 원문, 프롬프트, 모델 원본 응답, API 키는 로그에 남기지 않고
+요청에 `store: false`를 실어 OpenAI 쪽에도 대화를 남기지 않습니다.
+
 주의할 점이 있습니다.
 
 - `vapid.pem`은 커밋하지 않고 비밀 저장소로 옮긴 뒤 삭제합니다.
@@ -134,6 +147,9 @@ DB_PASSWORD=<비밀번호> docker compose --profile app up --build
 | `VAPID_PUBLIC_KEY` | VAPID 공개키(비압축 65바이트 base64url) | 없음(발송 시 필요) |
 | `VAPID_PRIVATE_KEY` | VAPID 비밀키(32바이트 스칼라 base64url) | 없음(발송 시 필요) |
 | `VAPID_SUBJECT` | VAPID subject(`mailto:` 또는 `https:` URI) | 없음(발송 시 필요) |
+| `OPENAI_API_KEY` | OpenAI API 키 | 없음(AI 사용 시 필요) |
+| `OPENAI_MODEL` | 구조화 응답을 지원하는 모델 이름 | 없음(AI 사용 시 필요) |
+| `OPENAI_BASE_URL` | OpenAI API 기본 주소 | `https://api.openai.com/v1` |
 | `SERVER_PORT` | 애플리케이션 포트 | `8080` |
 
 ## 데이터베이스

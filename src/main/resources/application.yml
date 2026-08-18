@@ -65,8 +65,26 @@ app:
 
   records:
     crypto:
-      # 32바이트 마스터 키를 Base64로 인코딩한 값. 원문 암호화 키와 커서 서명 키를 분리 파생한다.
+      # 32바이트 마스터 키를 Base64로 인코딩한 값.
+      # 원문 암호화 키, 커서 서명 키, 멱등 응답 암호화 키를 목적별로 분리 파생한다.
       master-key: ${RECORD_DATA_ENCRYPTION_KEY:}
+
+  ai:
+    openai:
+      # 키나 모델이 비어 있으면 애플리케이션은 뜨고 AI 호출만 실패로 처리한다.
+      # 구조화는 실패해도 사용자가 직접 고르면 진행되고, 관리 설명은 승인된 대체 문구로 저장된다.
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      api-key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:}
+      # 사용자를 기다리게 하는 화면 앞단 호출이라 오래 붙잡지 않고 실패로 돌린다.
+      connect-timeout: 3s
+      read-timeout: 8s
+      max-output-tokens: 800
+      # 구조화는 사용자가 한 화면에서 여러 번 부를 수 있고 호출마다 외부 비용이 든다.
+      # 보고 생성과 설명 재생성은 하루 한 건·결과당 한 번으로 자연히 묶이므로 이 경로만 제한한다.
+      rate-limit:
+        limit: 30
+        window: 1h
 
   notifications:
     crypto:
