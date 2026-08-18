@@ -107,7 +107,6 @@ app:
         - push.services.mozilla.com
         - web.push.apple.com
         - notify.windows.com
-
   onboarding:
     # 지금 받고 있는 동의서 버전. 요청이 이 값과 다르면 동의를 저장하지 않는다.
     # 문구가 바뀌면 이 값을 올려 예전 버전으로 오는 요청이 새 동의를 다시 받게 한다.
