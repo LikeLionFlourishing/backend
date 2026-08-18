@@ -21,6 +21,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * 컨트롤러에서 빠져나온 예외를 모두 명세 Problem 형식(application/problem+json)으로 바꾼다.
@@ -124,6 +125,7 @@ public class GlobalExceptionHandler {
      * 상속하지 않고 아래 Exception 캐치올을 두고 있어, 따로 받지 않으면 전부 500으로 나간다.
      *
      * <ul>
+     *   <li>404 — 어떤 핸들러나 정적 리소스에도 걸리지 않은 경로.
      *   <li>405 — 매핑되지 않은 메서드. {@code PUT /v1/me}처럼 경로만 열려 있는 자리에서 난다.
      *   <li>415 — Content-Type이 없거나 지원하지 않는 요청.
      *   <li>403 — 컨트롤러 안에서 난 접근 거부. {@link ProblemAccessDeniedHandler}는 필터 단계에서
@@ -136,6 +138,22 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ) {
         return problem(ErrorCode.METHOD_NOT_ALLOWED, request, null);
+    }
+
+    /**
+     * 어떤 핸들러나 정적 리소스에도 걸리지 않은 경로. 404로 답한다.
+     *
+     * <p>이 핸들러가 없으면 500이 나간다. 인가 설정이 열어 둔 경로 중 실제 자원이 없는 자리에서
+     * 생기는데, 운영 프로파일이 Swagger를 닫으면 {@code /swagger-ui.html}과
+     * {@code /v3/api-docs}가 바로 그런 자리가 된다. 없는 문서를 찾은 것이 서버 오류로 보고되면
+     * 로그에 예외가 쌓이고 클라이언트도 재시도할지 판단할 수 없다.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(
+            NoResourceFoundException exception,
+            HttpServletRequest request
+    ) {
+        return problem(ErrorCode.NOT_FOUND, request, null);
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
