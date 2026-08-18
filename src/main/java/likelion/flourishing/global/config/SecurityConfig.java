@@ -1,5 +1,6 @@
 package likelion.flourishing.global.config;
 
+import jakarta.servlet.DispatcherType;
 import likelion.flourishing.domain.auth.security.ProblemAccessDeniedHandler;
 import likelion.flourishing.domain.auth.security.ProblemAuthenticationEntryPoint;
 import likelion.flourishing.domain.auth.security.SessionAuthenticationFilter;
@@ -72,6 +73,9 @@ public class SecurityConfig {
                 )
                 .addFilterBefore(sessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(authorize -> authorize
+                        // 오류 포워드에도 인가가 적용되면 필터 밖에서 난 500이 401로 덮인다.
+                        // 프런트엔드는 그것을 세션 만료로 읽고 사용자를 로그아웃시킨다.
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .requestMatchers(HttpMethod.POST, "/v1/users").permitAll()
                         .requestMatchers(HttpMethod.POST, "/v1/sessions").permitAll()

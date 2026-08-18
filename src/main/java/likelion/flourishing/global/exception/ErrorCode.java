@@ -39,6 +39,18 @@ public enum ErrorCode {
             "잘못된 커서",
             "기록 목록 커서가 올바르지 않습니다."
     ),
+    METHOD_NOT_ALLOWED(
+            HttpStatus.METHOD_NOT_ALLOWED,
+            "METHOD_NOT_ALLOWED",
+            "허용되지 않은 메서드",
+            "이 경로에서 지원하지 않는 요청 방식입니다."
+    ),
+    UNSUPPORTED_MEDIA_TYPE(
+            HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+            "UNSUPPORTED_MEDIA_TYPE",
+            "지원하지 않는 형식",
+            "요청 본문 형식이 올바르지 않습니다. Content-Type을 확인해 주세요."
+    ),
     EMAIL_ALREADY_REGISTERED(
             HttpStatus.CONFLICT,
             "EMAIL_ALREADY_REGISTERED",
@@ -50,6 +62,12 @@ public enum ErrorCode {
             "DELETE_CONFIRMATION_REQUIRED",
             "삭제 확인 필요",
             "계정 삭제를 확인하는 헤더가 올바르지 않습니다."
+    ),
+    CONSENT_VERSION_NOT_ACCEPTED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "CONSENT_VERSION_NOT_ACCEPTED",
+            "동의서 버전 불일치",
+            "현재 받고 있는 동의서 버전이 아닙니다. 최신 동의 화면에서 다시 진행해 주세요."
     ),
     CHECK_IN_DATE_NOT_TODAY(
             HttpStatus.UNPROCESSABLE_ENTITY,

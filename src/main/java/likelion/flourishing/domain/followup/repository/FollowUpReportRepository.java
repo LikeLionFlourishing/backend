@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -24,6 +26,8 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public class FollowUpReportRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(FollowUpReportRepository.class);
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -57,8 +61,13 @@ public class FollowUpReportRepository {
     /**
      * 경과가 저장된 보고를 COMPLETED로 바꾼다.
      *
-     * <p>이미 COMPLETED인 보고는 건드리지 않도록 status 조건을 함께 건다. 같은 보고에
-     * 두 요청이 동시에 들어와도 상태를 두 번 바꾸지 않는다.
+     * <p>FOLLOW_UP_PENDING인 보고만 바꾼다. 이미 COMPLETED인 것을 두 번 건드리지 않으려는 목적도
+     * 있지만, 더 중요한 것은 EXPIRED로 정리된 보고가 COMPLETED로 되돌아가지 못하게 막는 것이다.
+     * 만료 정리 배치와 이 요청 사이에 시계 오차가 있으면 그런 되돌림이 성립할 수 있다.
+     *
+     * <p>바뀐 행이 없으면 상태 전이가 유실된 것이라 로그로 남긴다. 경과 행은 있는데 보고가
+     * FOLLOW_UP_PENDING으로 남으면 홈이 계속 그 보고를 입력 대상으로 보여 주는데, 같은 내용의
+     * 재요청은 저장된 경과를 그대로 돌려주며 상태를 손대지 않아 스스로 벗어날 수 없다.
      */
     public void markCompleted(UUID reportId, UUID userId) {
         Query query = entityManager.createNativeQuery("""
@@ -66,11 +75,14 @@ public class FollowUpReportRepository {
                 SET status = 'COMPLETED'
                 WHERE id = UUID_TO_BIN(:reportId)
                   AND user_id = UUID_TO_BIN(:userId)
-                  AND status <> 'COMPLETED'
+                  AND status = 'FOLLOW_UP_PENDING'
                 """);
         query.setParameter("reportId", reportId.toString());
         query.setParameter("userId", userId.toString());
-        query.executeUpdate();
+
+        if (query.executeUpdate() == 0) {
+            log.warn("경과를 저장했으나 보고 상태를 바꾸지 못했습니다. reportId={}", reportId);
+        }
     }
 
     private LocalDateTime toLocalDateTime(Object value) {

@@ -14,6 +14,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import likelion.flourishing.domain.report.dto.response.GuideSectionResponse;
+import likelion.flourishing.domain.report.dto.response.RecommendedIngredientResponse;
+import likelion.flourishing.domain.report.entity.GuideSectionKey;
 import java.util.List;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
@@ -153,11 +156,15 @@ class SkinRecordControllerTest {
         CareResultResponse careResult = CareResultResponse.of(
                 ResultType.SELF_CARE_GUIDE,
                 List.of("GEN-001"),
+                List.of(GuideSectionResponse.of(GuideSectionKey.DO_TODAY, "오늘 할 일", "오늘 시도해볼 행동입니다.", false)),
                 "2026-08-09-v1",
                 "자극 없이 관리해 보세요.",
                 List.of("미지근한 물로 씻기"),
                 List.of("손으로 만지지 않기"),
                 List.of("붉은 범위 확인"),
+                List.of(RecommendedIngredientResponse.of(
+                        "ING_PANTHENOL", "판테놀", "진정에 쓰이는 성분입니다.", null, List.of("GEN-001")
+                )),
                 List.of(),
                 null,
                 null,

@@ -3,6 +3,7 @@ package likelion.flourishing.domain.notification.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.net.URI;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.notification.dto.request.RegisterPushSubscriptionRequest;
@@ -10,15 +11,12 @@ import likelion.flourishing.domain.notification.dto.response.PushSubscriptionRes
 import likelion.flourishing.domain.notification.service.PushSubscriptionService;
 import likelion.flourishing.domain.notification.service.SavedPushSubscription;
 import org.springframework.http.CacheControl;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,8 +30,10 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Tag(name = "Notifications", description = "PWA Push 구독")
 @RestController
-@RequestMapping("/v1/push-subscriptions")
+@RequestMapping(PushSubscriptionController.BASE_PATH)
 public class PushSubscriptionController {
+
+    static final String BASE_PATH = "/v1/push-subscriptions";
 
     private final PushSubscriptionService pushSubscriptionService;
 
@@ -45,11 +45,16 @@ public class PushSubscriptionController {
     @PostMapping
     public ResponseEntity<PushSubscriptionResponse> register(
             @AuthenticationPrincipal AuthenticatedUser principal,
-            @Valid @RequestBody RegisterPushSubscriptionRequest request,
-            @RequestHeader(value = HttpHeaders.USER_AGENT, required = false) String userAgent
+            @Valid @RequestBody RegisterPushSubscriptionRequest request
     ) {
-        SavedPushSubscription saved = pushSubscriptionService.register(principal, request, userAgent);
-        return ResponseEntity.status(saved.created() ? HttpStatus.CREATED : HttpStatus.OK)
+        SavedPushSubscription saved = pushSubscriptionService.register(principal, request);
+        if (!saved.created()) {
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.noStore())
+                    .body(saved.response());
+        }
+        // 명세는 201에만 Location을 요구한다. 갱신(200)은 이미 알고 있는 리소스라 붙이지 않는다.
+        return ResponseEntity.created(URI.create(BASE_PATH + "/" + saved.response().getId()))
                 .cacheControl(CacheControl.noStore())
                 .body(saved.response());
     }

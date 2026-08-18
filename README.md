@@ -1,6 +1,6 @@
 # flourishing-backend
 
-관리하는 행보관 서비스의 Spring Boot 백엔드 저장소입니다.
+제대로 서비스의 Spring Boot 백엔드 저장소입니다.
 
 ## 요구사항
 
@@ -194,6 +194,19 @@ DB_PASSWORD=<비밀번호> docker compose --profile app up --build
 
 요구 버전은 MySQL **8.0.19 이상**입니다. `db/seed/` 가 `INSERT ... AS new ON DUPLICATE KEY
 UPDATE` 별칭 문법을 쓰고, 그 문법이 8.0.19에서 들어왔습니다.
+
+### 마이그레이션
+
+`db/migration/`에 날짜순으로 둡니다. 이미 데이터가 있는 DB에 새 스키마를 적용하기 전에
+해당 스크립트를 먼저 돌려야 합니다.
+
+| 스크립트 | 선행 조건 |
+|---|---|
+| `2026-08-18_v2_1_follow_ups.sql` | `follow_ups`에 `skin_change`가 `NEW_AREA`·`UNSURE`이거나 `action_completion`이 NULL인 행이 남아 있으면 명세 v2_1의 CHECK 제약을 만들 수 없습니다. |
+
+```bash
+docker exec -i flourishing-mysql mysql -uroot -p<비밀번호> flourishing < db/migration/2026-08-18_v2_1_follow_ups.sql
+```
 
 ## 브랜치 전략
 

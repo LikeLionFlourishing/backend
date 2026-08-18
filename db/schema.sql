@@ -87,13 +87,15 @@ CREATE TABLE user_consents (
         FOREIGN KEY (user_id) REFERENCES users (id)
         ON UPDATE RESTRICT ON DELETE CASCADE,
     CONSTRAINT ck_user_consents_type
-        CHECK (consent_type IN ('SERVICE_SCOPE', 'SENSITIVE_DATA')),
+        CHECK (consent_type IN ('SERVICE_SCOPE', 'SENSITIVE_DATA', 'NOTIFICATION')),
+    -- 동의하지 않은 사실은 행을 남기지 않는 것으로 표현한다. 거절을 저장하지 않으므로
+    -- NOTIFICATION 동의도 이 CHECK를 그대로 지킨다.
     CONSTRAINT ck_user_consents_required_accepted
         CHECK (accepted = TRUE)
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_0900_ai_ci
-  COMMENT = '버전별 필수 동의 이력';
+  COMMENT = '버전별 동의 이력';
 
 CREATE INDEX ix_user_consents_user_consented
     ON user_consents (user_id, consented_at DESC);
@@ -101,7 +103,9 @@ CREATE INDEX ix_user_consents_user_consented
 CREATE TABLE notification_settings (
     user_id BINARY(16) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    notification_time CHAR(5) NOT NULL DEFAULT '17:30',
+    -- CHAR(5)에서 옮겼다. 이 스키마의 다른 문자열 컬럼과 표기를 맞추고,
+    -- CHAR의 공백 패딩이 문자열 비교에 끼어들지 않게 한다.
+    notification_time VARCHAR(5) NOT NULL DEFAULT '17:30',
     timezone VARCHAR(40) NOT NULL DEFAULT 'Asia/Seoul',
     permission_state VARCHAR(20) NOT NULL DEFAULT 'DEFAULT',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -112,8 +116,10 @@ CREATE TABLE notification_settings (
     CONSTRAINT fk_notification_settings_user
         FOREIGN KEY (user_id) REFERENCES users (id)
         ON UPDATE RESTRICT ON DELETE CASCADE,
-    CONSTRAINT ck_notification_settings_time
-        CHECK (notification_time = '17:30'),
+    -- 명세 v2_1에서 발송 시각이 17:30 고정에서 온보딩 시간 피커 값으로 바뀌어
+    -- ck_notification_settings_time(= '17:30')을 뺐다.
+    -- HH:mm 형식은 care_rules.rule_code와 같은 이유로 애플리케이션 입력 검증에서 강제한다.
+    -- DB에서는 버전별 CHECK 함수 호환성을 고려해 형식 검사를 두지 않는다.
     CONSTRAINT ck_notification_settings_timezone
         CHECK (timezone = 'Asia/Seoul'),
     CONSTRAINT ck_notification_settings_permission
@@ -121,7 +127,7 @@ CREATE TABLE notification_settings (
 ) ENGINE = InnoDB
   DEFAULT CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_0900_ai_ci
-  COMMENT = '사용자별 P0 고정 알림 설정';
+  COMMENT = '사용자별 알림 설정';
 
 -- -----------------------------------------------------------------------------
 -- 관리규칙 정의와 승인
@@ -864,6 +870,8 @@ CREATE TABLE follow_ups (
     user_id BINARY(16) NOT NULL,
     kind VARCHAR(30) NOT NULL,
     skin_change VARCHAR(30) NOT NULL,
+    -- 명세 v2_1에서 두 종류 모두 받는 값이 되었다. NOT NULL로 좁히지 않는 이유는
+    -- ck_follow_ups_type_payload가 이미 종류별 필수 여부를 강제하고 있어서다.
     action_completion VARCHAR(30) NULL,
     clinician_check_status VARCHAR(40) NULL,
     submitted_at DATETIME(6) NOT NULL,
@@ -876,8 +884,10 @@ CREATE TABLE follow_ups (
         ON UPDATE RESTRICT ON DELETE CASCADE,
     CONSTRAINT ck_follow_ups_kind
         CHECK (kind IN ('SELF_CARE', 'CLINICIAN_CHECK')),
+    -- 명세 v2_1에서 NEW_AREA, UNSURE가 빠져 세 개가 됐다. 두 값이 남아 있는 기존 행이 있으면
+    -- 이 CHECK를 만들 수 없으므로 배포 전에 마이그레이션이 필요하다.
     CONSTRAINT ck_follow_ups_skin_change
-        CHECK (skin_change IN ('IMPROVED', 'SIMILAR', 'WORSENED', 'NEW_AREA', 'UNSURE')),
+        CHECK (skin_change IN ('IMPROVED', 'SIMILAR', 'WORSENED')),
     CONSTRAINT ck_follow_ups_action_completion
         CHECK (
             action_completion IS NULL
@@ -888,18 +898,15 @@ CREATE TABLE follow_ups (
             clinician_check_status IS NULL
             OR clinician_check_status IN ('CHECKED', 'NOT_YET', 'PREFER_NOT_TO_RECORD')
         ),
+    -- 명세 v2_1에서 CLINICIAN_CHECK도 action_completion을 받게 되어, 이 값은 종류와 무관하게
+    -- 항상 있어야 한다. 두 모양을 가르는 것은 clinician_check_status 하나만 남았다.
     CONSTRAINT ck_follow_ups_type_payload
         CHECK (
-            (
-                kind = 'SELF_CARE'
-                AND action_completion IS NOT NULL
-                AND clinician_check_status IS NULL
-            )
-            OR
-            (
-                kind = 'CLINICIAN_CHECK'
-                AND action_completion IS NULL
-                AND clinician_check_status IS NOT NULL
+            action_completion IS NOT NULL
+            AND (
+                (kind = 'SELF_CARE' AND clinician_check_status IS NULL)
+                OR
+                (kind = 'CLINICIAN_CHECK' AND clinician_check_status IS NOT NULL)
             )
         )
 ) ENGINE = InnoDB

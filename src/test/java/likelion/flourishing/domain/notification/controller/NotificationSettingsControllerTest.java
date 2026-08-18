@@ -12,8 +12,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
@@ -59,11 +57,11 @@ class NotificationSettingsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.enabled").value(true))
-                .andExpect(jsonPath("$.notificationTime").value("17:30"))
+                .andExpect(jsonPath("$.time").value("17:30"))
                 .andExpect(jsonPath("$.timezone").value("Asia/Seoul"))
-                .andExpect(jsonPath("$.permissionState").value("GRANTED"))
+                .andExpect(jsonPath("$.permission").value("GRANTED"))
                 .andExpect(jsonPath("$.activeSubscriptionCount").value(1))
-                .andExpect(jsonPath("$.updatedAt").value("2026-08-15T08:30:00Z"));
+                .andExpect(jsonPath("$.updatedAt").doesNotExist());
     }
 
     @Test
@@ -76,18 +74,20 @@ class NotificationSettingsControllerTest {
                         .with(authentication(authenticationToken())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false))
-                .andExpect(jsonPath("$.notificationTime").value("17:30"));
+                .andExpect(jsonPath("$.time").value("17:30"));
     }
 
+    /** 명세 요청 본문은 enabled 하나뿐이다. 권한은 온보딩에서 받는다. */
     @Test
-    void patchAcceptsPermissionState() throws Exception {
-        when(notificationSettingsService.updateSettings(any(), any())).thenReturn(response(true, 1L));
-
+    void patchRejectsPermissionFieldInBody() throws Exception {
         mockMvc.perform(patch(PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"enabled\":true,\"permissionState\":\"GRANTED\"}")
+                        .content("{\"enabled\":true,\"permission\":\"GRANTED\"}")
                         .with(authentication(authenticationToken())))
-                .andExpect(status().isOk());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+
+        verify(notificationSettingsService, never()).updateSettings(any(), any());
     }
 
     @Test
@@ -115,10 +115,10 @@ class NotificationSettingsControllerTest {
     }
 
     @Test
-    void patchRejectsUnknownPermissionState() throws Exception {
+    void patchRejectsNonBooleanEnabled() throws Exception {
         mockMvc.perform(patch(PATH)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"enabled\":true,\"permissionState\":\"MAYBE\"}")
+                        .content("{\"enabled\":\"maybe\"}")
                         .with(authentication(authenticationToken())))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
@@ -130,8 +130,7 @@ class NotificationSettingsControllerTest {
                 "17:30",
                 "Asia/Seoul",
                 enabled ? NotificationPermission.GRANTED : NotificationPermission.DENIED,
-                subscriptions,
-                OffsetDateTime.of(2026, 8, 15, 8, 30, 0, 0, ZoneOffset.UTC)
+                subscriptions
         );
     }
 

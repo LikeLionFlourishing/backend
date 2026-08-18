@@ -197,7 +197,8 @@ class WebPushHttpGatewayTest {
                 new Vapid(publicKey, privateKey, "mailto:ops@example.invalid"),
                 Duration.ofHours(1),
                 Duration.ofSeconds(2),
-                Duration.ofSeconds(2)
+                Duration.ofSeconds(2),
+                null
         );
     }
 
