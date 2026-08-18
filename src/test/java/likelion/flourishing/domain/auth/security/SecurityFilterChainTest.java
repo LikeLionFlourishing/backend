@@ -1,5 +1,6 @@
 package likelion.flourishing.domain.auth.security;
 
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -162,6 +164,44 @@ class SecurityFilterChainTest {
     void pathOutsideTheWhitelistIsDenied() throws Exception {
         mockMvc.perform(get("/v1/not-registered-yet"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * Spring MVC가 4xx로 정의한 예외가 500으로 새지 않는지 확인한다. GlobalExceptionHandler가
+     * Exception 캐치올을 들고 있어 따로 받지 않으면 전부 500이 된다.
+     */
+    @Test
+    void unmappedMethodOnAnOpenPathIsMethodNotAllowed() throws Exception {
+        when(sessionService.authenticate(eq(SESSION_TOKEN), eq("PUT"), isNull()))
+                .thenReturn(Optional.of(principal()));
+
+        mockMvc.perform(put("/v1/me").cookie(sessionCookie()))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+    }
+
+    @Test
+    void requestWithoutContentTypeIsUnsupportedMediaType() throws Exception {
+        mockMvc.perform(post("/v1/sessions").content("{}"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"));
+    }
+
+    /**
+     * 인증이 필요 없는 경로는 세션 쿠키를 보지 않는다. 살아 있는 쿠키를 들고 로그인 화면을 다시
+     * 제출하는 흐름이 CSRF 검사에 걸려 403이 되면 사용자는 원인을 알 수 없다.
+     */
+    @Test
+    void loginWithALiveSessionCookieIsNotBlockedByCsrf() throws Exception {
+        mockMvc.perform(post("/v1/sessions")
+                        .cookie(sessionCookie())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"soldier@example.com\",\"password\":\"correct-horse-battery-staple\"}"))
+                .andExpect(status().is(not(403)));
+
+        verify(sessionService, never()).authenticate(anyString(), anyString(), any());
     }
 
     private Cookie sessionCookie() {

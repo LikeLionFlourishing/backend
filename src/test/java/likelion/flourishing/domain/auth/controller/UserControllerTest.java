@@ -85,7 +85,7 @@ class UserControllerTest {
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, Matchers.containsString("__Host-session=opaque")))
                 .andExpect(header().string(HttpHeaders.SET_COOKIE, Matchers.containsString("HttpOnly")))
                 .andExpect(jsonPath("$.user.id").value(USER_ID.toString()))
-                .andExpect(jsonPath("$.user.signupcompleted").value(false))
+                .andExpect(jsonPath("$.user.signupCompleted").value(false))
                 .andExpect(jsonPath("$.csrfToken").value("csrf-token-value-that-is-long-enough"))
                 .andExpect(jsonPath("$.expiresAt").exists());
     }
@@ -102,6 +102,35 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.errors[0].field").value("password"));
 
         verify(authService, never()).register(any(), anyString());
+    }
+
+    /**
+     * BCrypt는 UTF-8 기준 72바이트까지만 읽는다. 문자 수 제한만 있으면 앞 72바이트가 같은 두
+     * 비밀번호가 같은 해시가 되어, 가입할 때 정한 뒷부분이 로그인에서 검사되지 않는다.
+     */
+    @Test
+    void registerRejectsPasswordOverBcryptByteLimit() throws Exception {
+        String tooLong = "a".repeat(73);
+
+        mockMvc.perform(post("/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"soldier@example.com\",\"password\":\"" + tooLong + "\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors[0].field").value("password"));
+
+        verify(authService, never()).register(any(), anyString());
+    }
+
+    @Test
+    void registerAcceptsPasswordAtBcryptByteLimit() throws Exception {
+        when(authService.register(any(), anyString())).thenReturn(authSessionIssue());
+        when(sessionCookieFactory.create(anyString())).thenReturn(sessionCookie());
+
+        mockMvc.perform(post("/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"soldier@example.com\",\"password\":\"" + "a".repeat(72) + "\"}"))
+                .andExpect(status().isCreated());
     }
 
     @Test
@@ -123,7 +152,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(USER_ID.toString()))
                 .andExpect(jsonPath("$.email").value("soldier@example.com"))
-                .andExpect(jsonPath("$.signupcompleted").value(false));
+                .andExpect(jsonPath("$.signupCompleted").value(false));
     }
 
     @Test
