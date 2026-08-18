@@ -128,6 +128,11 @@ CREATE TABLE notification_settings (
   COLLATE = utf8mb4_0900_ai_ci
   COMMENT = '사용자별 알림 설정';
 
+-- 발송 대상 조회가 쓰는 인덱스. 매 분 도는 조회라 두 컬럼을 함께 건다.
+-- enabled 를 앞에 둔 것은 그쪽 선택도가 먼저 걸리기 때문이다.
+CREATE INDEX ix_notification_settings_dispatch
+    ON notification_settings (enabled, notification_time);
+
 -- -----------------------------------------------------------------------------
 -- 관리규칙 정의와 승인
 -- -----------------------------------------------------------------------------

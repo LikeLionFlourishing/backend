@@ -142,6 +142,27 @@ class NotificationMySqlIntegrationTest {
         assertThat(userIds).containsExactly(ENABLED_USER_ID);
     }
 
+    /**
+     * 발송 시각이 지난 사용자도 그날 아직 못 받았으면 대상이다.
+     *
+     * <p>등호로 두면 그 분에 실행이 빠진 사용자가 그날을 통째로 건너뛴다. 스케줄러 스레드가
+     * 하나뿐이라 앞 실행이 길어지거나 배포가 그 분에 걸치면 실제로 일어난다.
+     */
+    @Test
+    void userWhoseTimeAlreadyPassedIsStillPickedUp() {
+        assertThat(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:45"))
+                .containsExactly(ENABLED_USER_ID);
+        assertThat(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "23:59"))
+                .containsExactly(ENABLED_USER_ID);
+    }
+
+    /** 아직 발송 시각이 되지 않은 사용자는 고르지 않는다. */
+    @Test
+    void userWhoseTimeHasNotArrivedIsNotPicked() {
+        assertThat(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:29")).isEmpty();
+        assertThat(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "00:00")).isEmpty();
+    }
+
     @Test
     void usersWithDeliveryForThatDayAreExcluded() {
         notificationDeliveryRepository.saveAndFlush(NotificationDelivery.skipped(ENABLED_USER_ID, DATE));
