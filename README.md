@@ -204,8 +204,12 @@ docker run --rm -p 8081:8080 \
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 
-운영 프로파일(`SPRING_PROFILES_ACTIVE=prod`)에서는 두 경로를 닫습니다. `SecurityConfig` 의
-공개 경로 목록에 들어 있어 켜 두면 인증 없이 열리기 때문입니다.
+운영 프로파일(`SPRING_PROFILES_ACTIVE=prod`)에서는 두 경로를 기본으로 닫습니다. `SecurityConfig` 의
+공개 경로 목록에 들어 있어 애플리케이션 쪽에서는 인증을 걸 수 없기 때문입니다.
+
+서버에서 문서를 봐야 하면 `.env` 에 `API_DOCS_ENABLED=true` 를 넣고 다시 올립니다. 이때도 프록시가
+`/swagger-ui*` 와 `/v3/api-docs*` 에 Basic 인증을 걸어 두므로 `DOCS_BASIC_AUTH_USER` 와 비밀번호가
+필요합니다. 계정 설정과 접속 절차는 [배포 안내](docs/DEPLOY.md)에 있습니다.
 
 ### 명세 파일 갱신
 

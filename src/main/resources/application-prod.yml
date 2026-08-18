@@ -11,13 +11,15 @@ spring:
       hibernate:
         format_sql: false
 
-# API 문서를 닫는다. SecurityConfig 의 PUBLIC_PATHS 에 swagger 경로가 있어 켜 두면 인증 없이
-# 열린다. 명세는 저장소와 팀 문서에 있으므로 서버에서 다시 내보낼 이유가 없다.
+# API 문서는 기본으로 닫는다. SecurityConfig 의 PUBLIC_PATHS 에 swagger 경로가 있어 애플리케이션
+# 쪽에서는 인증을 걸 수 없다. 켜야 할 때는 API_DOCS_ENABLED=true 로 올리는데, 그때도 프록시의
+# Basic 인증이 앞을 막는다(Caddyfile 의 @docs 규칙). 저장소의 docs/openapi.generated.json 으로
+# 충분하면 켜지 않는 편이 낫다.
 springdoc:
   api-docs:
-    enabled: false
+    enabled: ${API_DOCS_ENABLED:false}
   swagger-ui:
-    enabled: false
+    enabled: ${API_DOCS_ENABLED:false}
 
 logging:
   level:
