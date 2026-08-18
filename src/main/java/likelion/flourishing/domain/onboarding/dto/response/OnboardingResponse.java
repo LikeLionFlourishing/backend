@@ -25,6 +25,11 @@ public class OnboardingResponse {
 
     private final NotificationPermission notificationPermission;
 
+    /** 온보딩 시간 피커에서 정한 기본 피부 점호 시각. 알림을 끈 사용자도 값을 가진다. */
+    private final String notificationTime;
+
+    private final NotificationConsentResponse notificationConsent;
+
     private final OffsetDateTime completedAt;
 
     public static OnboardingResponse of(
@@ -32,6 +37,8 @@ public class OnboardingResponse {
             OffsetDateTime consentedAt,
             boolean notificationEnabled,
             NotificationPermission notificationPermission,
+            String notificationTime,
+            NotificationConsentResponse notificationConsent,
             OffsetDateTime completedAt
     ) {
         return new OnboardingResponse(
@@ -39,6 +46,8 @@ public class OnboardingResponse {
                 consentedAt,
                 notificationEnabled,
                 notificationPermission,
+                notificationTime,
+                notificationConsent,
                 completedAt
         );
     }
@@ -46,6 +55,7 @@ public class OnboardingResponse {
     public static OnboardingResponse from(
             UserConsent consent,
             NotificationSetting notificationSetting,
+            NotificationConsentResponse notificationConsent,
             LocalDateTime completedAt
     ) {
         return new OnboardingResponse(
@@ -53,6 +63,8 @@ public class OnboardingResponse {
                 consent.getConsentedAt().atOffset(ZoneOffset.UTC),
                 notificationSetting.isEnabled(),
                 notificationSetting.getPermissionState(),
+                notificationSetting.getNotificationTime(),
+                notificationConsent,
                 completedAt.atOffset(ZoneOffset.UTC)
         );
     }
