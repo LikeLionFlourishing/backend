@@ -52,25 +52,36 @@ public class NotificationDispatchService {
         this.clock = clock;
     }
 
-    /** 오늘(Asia/Seoul) 몫을 발송한다. 실제로 발송한 사용자 수를 돌려준다. */
-    public int dispatchToday() {
-        return dispatch(NotificationSchedule.today(clock));
+    /**
+     * 지금 이 분에 발송할 몫을 보낸다. 실제로 발송한 사용자 수를 돌려준다.
+     *
+     * <p>명세 v2_1에서 발송 시각이 사용자마다 달라져, 하루 한 번이 아니라 매 분 돌면서 그 분을
+     * 고른 사용자만 고른다.
+     */
+    public int dispatchNow() {
+        return dispatch(NotificationSchedule.today(clock), NotificationSchedule.currentTimeText(clock));
     }
 
-    public int dispatch(LocalDate notificationDate) {
+    public int dispatch(LocalDate notificationDate, String notificationTime) {
         if (!properties.vapidConfigured()) {
-            log.warn("VAPID 키가 없어 {} 알림 발송을 건너뜁니다.", notificationDate);
+            log.warn("VAPID 키가 없어 {} {} 알림 발송을 건너뜁니다.", notificationDate, notificationTime);
             return 0;
         }
 
-        List<UUID> userIds = notificationTargetQueryRepository.findUserIdsToEvaluate(notificationDate);
+        List<UUID> userIds = notificationTargetQueryRepository
+                .findUserIdsToEvaluate(notificationDate, notificationTime);
         int sent = 0;
         for (UUID userId : userIds) {
             if (dispatchToUser(userId, notificationDate)) {
                 sent++;
             }
         }
-        log.info("{} 알림 발송을 마쳤습니다. 대상 {}명 중 {}명 발송", notificationDate, userIds.size(), sent);
+        if (!userIds.isEmpty()) {
+            log.info(
+                    "{} {} 알림 발송을 마쳤습니다. 대상 {}명 중 {}명 발송",
+                    notificationDate, notificationTime, userIds.size(), sent
+            );
+        }
         return sent;
     }
 

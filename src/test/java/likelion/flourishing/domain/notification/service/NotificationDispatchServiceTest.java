@@ -66,11 +66,11 @@ class NotificationDispatchServiceTest {
 
     @Test
     void todayUsesSeoulDate() {
-        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE)).thenReturn(List.of());
+        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30")).thenReturn(List.of());
 
-        service.dispatchToday();
+        service.dispatchNow();
 
-        verify(notificationTargetQueryRepository).findUserIdsToEvaluate(DATE);
+        verify(notificationTargetQueryRepository).findUserIdsToEvaluate(DATE, "17:30");
     }
 
     @Test
@@ -79,29 +79,29 @@ class NotificationDispatchServiceTest {
                 new PushNotificationProperties(new Vapid(null, null, null), null, null, null, null)
         );
 
-        assertThat(unconfigured.dispatch(DATE)).isZero();
+        assertThat(unconfigured.dispatch(DATE, "17:30")).isZero();
         verifyNoInteractions(notificationTargetQueryRepository, notificationDeliveryService, webPushGateway);
     }
 
     @Test
     void sendsOnePushPerActiveSubscription() {
-        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE)).thenReturn(List.of(FIRST_USER));
+        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30")).thenReturn(List.of(FIRST_USER));
         when(notificationDeliveryService.reserve(eq(FIRST_USER), eq(DATE), any()))
                 .thenReturn(Optional.of(plan(NotificationType.FOLLOW_UP, REPORT_ID, 2)));
         when(webPushGateway.send(any())).thenReturn(WebPushResult.success());
 
-        assertThat(service.dispatch(DATE)).isEqualTo(1);
+        assertThat(service.dispatch(DATE, "17:30")).isEqualTo(1);
         verify(webPushGateway, times(2)).send(any());
     }
 
     @Test
     void followUpPayloadCarriesNoSkinDetail() {
-        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE)).thenReturn(List.of(FIRST_USER));
+        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30")).thenReturn(List.of(FIRST_USER));
         when(notificationDeliveryService.reserve(eq(FIRST_USER), eq(DATE), any()))
                 .thenReturn(Optional.of(plan(NotificationType.FOLLOW_UP, REPORT_ID, 1)));
         when(webPushGateway.send(any())).thenReturn(WebPushResult.success());
 
-        service.dispatch(DATE);
+        service.dispatch(DATE, "17:30");
 
         ArgumentCaptor<WebPushMessage> captor = ArgumentCaptor.forClass(WebPushMessage.class);
         verify(webPushGateway).send(captor.capture());
@@ -114,12 +114,12 @@ class NotificationDispatchServiceTest {
 
     @Test
     void resultsAreRecordedForEachSubscription() {
-        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE)).thenReturn(List.of(FIRST_USER));
+        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30")).thenReturn(List.of(FIRST_USER));
         when(notificationDeliveryService.reserve(eq(FIRST_USER), eq(DATE), any()))
                 .thenReturn(Optional.of(plan(NotificationType.DAILY_CHECK_IN, null, 1)));
         when(webPushGateway.send(any())).thenReturn(WebPushResult.expired("HTTP_410"));
 
-        service.dispatch(DATE);
+        service.dispatch(DATE, "17:30");
 
         ArgumentCaptor<List<SubscriptionOutcome>> captor = ArgumentCaptor.captor();
         verify(notificationDeliveryService).complete(eq(DELIVERY_ID), captor.capture(), any());
@@ -130,17 +130,17 @@ class NotificationDispatchServiceTest {
 
     @Test
     void skippedUserDoesNotReachGateway() {
-        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE)).thenReturn(List.of(FIRST_USER));
+        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30")).thenReturn(List.of(FIRST_USER));
         when(notificationDeliveryService.reserve(eq(FIRST_USER), eq(DATE), any())).thenReturn(Optional.empty());
 
-        assertThat(service.dispatch(DATE)).isZero();
+        assertThat(service.dispatch(DATE, "17:30")).isZero();
         verify(webPushGateway, never()).send(any());
         verify(notificationDeliveryService, never()).complete(any(), anyList(), any());
     }
 
     @Test
     void duplicateReservationDoesNotStopRemainingUsers() {
-        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE))
+        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30"))
                 .thenReturn(List.of(FIRST_USER, SECOND_USER));
         when(notificationDeliveryService.reserve(eq(FIRST_USER), eq(DATE), any()))
                 .thenThrow(new DataIntegrityViolationException("duplicate key"));
@@ -148,13 +148,13 @@ class NotificationDispatchServiceTest {
                 .thenReturn(Optional.of(plan(NotificationType.DAILY_CHECK_IN, null, 1)));
         when(webPushGateway.send(any())).thenReturn(WebPushResult.success());
 
-        assertThat(service.dispatch(DATE)).isEqualTo(1);
+        assertThat(service.dispatch(DATE, "17:30")).isEqualTo(1);
         verify(webPushGateway, times(1)).send(any());
     }
 
     @Test
     void failureToRecordResultDoesNotStopRemainingUsers() {
-        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE))
+        when(notificationTargetQueryRepository.findUserIdsToEvaluate(DATE, "17:30"))
                 .thenReturn(List.of(FIRST_USER, SECOND_USER));
         when(notificationDeliveryService.reserve(any(), eq(DATE), any()))
                 .thenReturn(Optional.of(plan(NotificationType.DAILY_CHECK_IN, null, 1)));
@@ -162,7 +162,7 @@ class NotificationDispatchServiceTest {
         org.mockito.Mockito.doThrow(new DataIntegrityViolationException("boom"))
                 .when(notificationDeliveryService).complete(any(), anyList(), any());
 
-        assertThat(service.dispatch(DATE)).isEqualTo(2);
+        assertThat(service.dispatch(DATE, "17:30")).isEqualTo(2);
         verify(webPushGateway, times(2)).send(any());
     }
 

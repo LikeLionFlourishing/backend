@@ -1,11 +1,19 @@
 name: CI
 
 on:
+  push:
+    branches: ["develop", "main"]
   pull_request:
-    branches: ["develop"]
+    # 스택 브랜치(feat/A → feat/B) PR도 검증 대상에 포함한다.
+    branches: ["develop", "main", "feat/**"]
 
 permissions:
   contents: read
+
+# 같은 참조에 새 실행이 들어오면 진행 중인 실행을 취소한다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

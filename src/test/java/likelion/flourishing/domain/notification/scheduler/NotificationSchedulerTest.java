@@ -26,36 +26,32 @@ class NotificationSchedulerTest {
 
     @Test
     void triggerDelegatesToDispatchService() {
-        when(notificationDispatchService.dispatchToday()).thenReturn(3);
+        when(notificationDispatchService.dispatchNow()).thenReturn(3);
 
-        scheduler.dispatchDailyNotifications();
+        scheduler.dispatchDueNotifications();
 
-        verify(notificationDispatchService).dispatchToday();
+        verify(notificationDispatchService).dispatchNow();
     }
 
     @Test
     void failureDoesNotEscapeToSchedulerThread() {
-        when(notificationDispatchService.dispatchToday()).thenThrow(new IllegalStateException("boom"));
+        when(notificationDispatchService.dispatchNow()).thenThrow(new IllegalStateException("boom"));
 
-        assertThatCode(scheduler::dispatchDailyNotifications).doesNotThrowAnyException();
+        assertThatCode(scheduler::dispatchDueNotifications).doesNotThrowAnyException();
     }
 
     /**
-     * cron 표현식에는 상수를 넣을 수 없어 문자열을 직접 적었다.
-     * 고정 시각·시간대 상수와 어긋나지 않는지 여기서 확인한다.
+     * 발송 시각이 사용자마다 달라져 cron이 매 분 실행으로 바뀌었다. 하루 한 번으로 되돌아가면
+     * 기본값 17:30이 아닌 시각을 고른 사용자가 알림을 못 받으므로 여기서 고정한다.
      */
     @Test
     void cronMatchesFixedTimeAndZone() throws Exception {
-        Method method = NotificationScheduler.class.getMethod("dispatchDailyNotifications");
+        Method method = NotificationScheduler.class.getMethod("dispatchDueNotifications");
         Scheduled scheduled = method.getAnnotation(Scheduled.class);
 
         assertThat(scheduled).isNotNull();
         assertThat(scheduled.cron()).isEqualTo(NotificationSchedule.CRON);
         assertThat(scheduled.zone()).isEqualTo(NotificationSchedule.ZONE_TEXT);
-        assertThat(NotificationSchedule.CRON)
-                .isEqualTo("0 %d %d * * *".formatted(
-                        NotificationSchedule.NOTIFICATION_TIME.getMinute(),
-                        NotificationSchedule.NOTIFICATION_TIME.getHour()
-                ));
+        assertThat(NotificationSchedule.CRON).isEqualTo("0 * * * * *");
     }
 }
