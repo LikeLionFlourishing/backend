@@ -9,6 +9,7 @@ import java.util.Arrays;
  * 저장할 수 없다. {@link RuleConditionFieldConverter}가 {@link #code()}로 변환한다.
  *
  * <p>completedHistory는 이 보고가 아니라 사용자의 완료된 과거 기록에서 뽑은 값이다.
+ * environments는 보고가 아니라 온보딩에서 1회 설정하는 예상 환경이다.
  */
 public enum RuleConditionField {
 
@@ -18,7 +19,8 @@ public enum RuleConditionField {
     SITUATIONS("situations"),
     CARE_AVAILABILITY("careAvailability"),
     PRE_CARE_CHECKS("preCareChecks"),
-    COMPLETED_HISTORY("completedHistory");
+    COMPLETED_HISTORY("completedHistory"),
+    ENVIRONMENTS("environments");
 
     private final String code;
 
