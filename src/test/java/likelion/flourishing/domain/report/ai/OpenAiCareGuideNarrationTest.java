@@ -143,8 +143,8 @@ class OpenAiCareGuideNarrationTest {
     void noAllowedActionSkipsTheCallEntirely() {
         NarrationOutcome outcome = narration.narrate(new NarrationCommand(
                 BodyArea.RIGHT_CHIN,
-                Set.of(Appearance.REDNESS),
-                Set.of(Sensation.NONE),
+                Set.of(Appearance.APP_REDNESS),
+                Set.of(Sensation.EXCESS_SEBUM),
                 Set.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED,
                 List.of("규칙 요약"),
@@ -170,8 +170,8 @@ class OpenAiCareGuideNarrationTest {
     private NarrationCommand commandOf(List<String> forbiddenExpressions, int maxItemsPerType) {
         return new NarrationCommand(
                 BodyArea.RIGHT_CHIN,
-                Set.of(Appearance.REDNESS),
-                Set.of(Sensation.STINGING_BURNING),
+                Set.of(Appearance.APP_REDNESS),
+                Set.of(Sensation.REDNESS),
                 Set.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED,
                 List.of("붉음이 있을 때의 관리"),

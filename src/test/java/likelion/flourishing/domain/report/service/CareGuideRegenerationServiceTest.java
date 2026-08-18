@@ -419,8 +419,8 @@ class CareGuideRegenerationServiceTest {
                 ResultType.SELF_CARE_GUIDE,
                 LocalDateTime.of(2026, 8, 15, 15, 0),
                 LocalDateTime.of(2026, 8, 17, 15, 0),
-                Set.of(Appearance.REDNESS),
-                Set.of(Sensation.STINGING_BURNING),
+                Set.of(Appearance.APP_REDNESS),
+                Set.of(Sensation.REDNESS),
                 Set.of(Situation.SHAVING),
                 Set.of(PreCareCheck.NONE)
         );

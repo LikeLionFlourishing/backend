@@ -64,7 +64,7 @@ class ReportInterpretationControllerTest {
               "rawText": "오른쪽 턱이 빨갛고 따가워요.",
               "manualSelections": {
                 "primaryArea": "RIGHT_CHIN",
-                "appearances": ["REDNESS"]
+                "appearances": ["APP_REDNESS"]
               }
             }
             """;
@@ -88,7 +88,7 @@ class ReportInterpretationControllerTest {
                 .andExpect(jsonPath("$.processingStatus").value("SUCCEEDED"))
                 .andExpect(jsonPath("$.failureCode").doesNotExist())
                 .andExpect(jsonPath("$.structured.primaryArea").value("RIGHT_CHIN"))
-                .andExpect(jsonPath("$.structured.appearances[0]").value("REDNESS"))
+                .andExpect(jsonPath("$.structured.appearances[0]").value("APP_REDNESS"))
                 .andExpect(jsonPath("$.fieldSources.primaryArea").value("MANUAL"))
                 .andExpect(jsonPath("$.fieldSources.sensations").value("AI"));
     }
@@ -171,8 +171,8 @@ class ReportInterpretationControllerTest {
         return StructuredSelectionsResponse.of(
                 BodyArea.RIGHT_CHIN,
                 null,
-                List.of(Appearance.REDNESS),
-                List.of(Sensation.STINGING_BURNING),
+                List.of(Appearance.APP_REDNESS),
+                List.of(Sensation.REDNESS),
                 List.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED
         );

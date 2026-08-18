@@ -85,12 +85,7 @@ public class ReportInterpretationService {
         consentGuard.assertConsented(principal.userId());
 
         ManualSelectionsRequest manual = request.manualSelectionsOrEmpty();
-        SkinReportPolicy.assertExclusiveSelections(
-                manual.appearanceSet(),
-                manual.sensationSet(),
-                manual.situationSet(),
-                Set.of()
-        );
+        SkinReportPolicy.assertExclusiveSelections(manual.situationSet(), Set.of());
         assertWithinRateLimit(principal.userId());
 
         StructuringOutcome outcome = structuringPort.structure(request.rawText());

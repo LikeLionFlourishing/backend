@@ -1,6 +1,7 @@
 -- 관리하는 행보관 MySQL DDL
 -- 작성일: 2026-08-09
--- 대상: MySQL 8.0.16 이상 / InnoDB / utf8mb4
+-- 대상: MySQL 8.0.19 이상 / InnoDB / utf8mb4
+--       (8.0.16 CHECK 제약, 8.0.19 db/seed의 INSERT ... AS new 별칭 문법)
 -- ORM: 미정
 --
 -- 중요:
@@ -580,9 +581,8 @@ CREATE TABLE report_appearances (
     CONSTRAINT ck_report_appearances_code
         CHECK (
             appearance_code IN (
-                'REDNESS', 'SMALL_BUMPS', 'WHITE_TIPPED_BUMPS',
-                'RED_BUMPS_AROUND_HAIR', 'ROUGHNESS_FLAKING',
-                'OOZING', 'CRUST', 'UNSURE'
+                'APP_REDNESS', 'APP_BUMP', 'APP_PUS_BUMP',
+                'APP_DRYNESS', 'APP_OILINESS', 'APP_OTHER'
             )
         )
 ) ENGINE = InnoDB
@@ -605,8 +605,7 @@ CREATE TABLE report_sensations (
     CONSTRAINT ck_report_sensations_code
         CHECK (
             sensation_code IN (
-                'ITCHING', 'STINGING_BURNING', 'PAIN_WHEN_PRESSED',
-                'PAIN_AT_REST', 'HEAT', 'TIGHTNESS', 'NONE'
+                'REDNESS', 'EXCESS_SEBUM', 'BREAKOUT'
             )
         )
 ) ENGINE = InnoDB
@@ -629,10 +628,8 @@ CREATE TABLE report_situations (
     CONSTRAINT ck_report_situations_code
         CHECK (
             situation_code IN (
-                'SHAVING', 'SWEAT_OR_DUST_AFTER_TRAINING',
-                'PROTECTIVE_GEAR_OR_MASK', 'DELAYED_WASHING',
-                'NEW_PRODUCT', 'TOUCHED_OR_SQUEEZED',
-                'SLEEP_DEPRIVATION', 'OTHER', 'NONE_RECALLED'
+                'PROTECTIVE_GEAR_OR_MASK', 'SHAVING', 'SQUEEZED_ACNE',
+                'NEW_PRODUCT', 'SWEAT_OR_SEBUM', 'NONE_RECALLED'
             )
         )
 ) ENGINE = InnoDB

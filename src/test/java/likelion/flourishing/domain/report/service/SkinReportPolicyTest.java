@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.Set;
 import likelion.flourishing.domain.report.entity.Appearance;
 import likelion.flourishing.domain.report.entity.PreCareCheck;
@@ -64,11 +65,9 @@ class SkinReportPolicyTest {
     }
 
     @Test
-    void unsureCannotBeChosenWithOtherAppearances() {
+    void noneRecalledCannotBeChosenWithOtherSituations() {
         assertThatThrownBy(() -> SkinReportPolicy.assertExclusiveSelections(
-                Set.of(Appearance.UNSURE, Appearance.REDNESS),
-                Set.of(Sensation.NONE),
-                Set.of(Situation.NONE_RECALLED),
+                Set.of(Situation.NONE_RECALLED, Situation.SHAVING),
                 Set.of(PreCareCheck.NONE)
         ))
                 .isInstanceOf(BusinessException.class)
@@ -79,8 +78,6 @@ class SkinReportPolicyTest {
     @Test
     void noneCannotBeChosenWithRiskSignals() {
         assertThatThrownBy(() -> SkinReportPolicy.assertExclusiveSelections(
-                Set.of(Appearance.REDNESS),
-                Set.of(Sensation.ITCHING),
                 Set.of(Situation.SHAVING),
                 Set.of(PreCareCheck.NONE, PreCareCheck.PUS_OOZING_BLISTER)
         ))
@@ -92,10 +89,20 @@ class SkinReportPolicyTest {
     @Test
     void severalNonExclusiveValuesArePermitted() {
         SkinReportPolicy.assertExclusiveSelections(
-                Set.of(Appearance.REDNESS, Appearance.SMALL_BUMPS),
-                Set.of(Sensation.ITCHING, Sensation.HEAT),
                 Set.of(Situation.SHAVING, Situation.NEW_PRODUCT),
                 Set.of(PreCareCheck.SPREADING_RAPIDLY, PreCareCheck.SEVERE_PAIN_HEAT_SWELLING)
         );
+    }
+
+    /**
+     * 명세 v2_1이 겉모습과 느껴지는 불편에서 단독 선택 개념을 걷어냈다. 두 그룹은 이제 어떤
+     * 조합이든 허용되며, 정책이 그 값을 아예 받지 않는다는 것을 여기서 고정한다.
+     */
+    @Test
+    void appearancesAndSensationsNoLongerHaveAnExclusiveValue() {
+        assertThat(Arrays.stream(Appearance.values()).map(Enum::name))
+                .doesNotContain("UNSURE");
+        assertThat(Arrays.stream(Sensation.values()).map(Enum::name))
+                .doesNotContain("NONE");
     }
 }

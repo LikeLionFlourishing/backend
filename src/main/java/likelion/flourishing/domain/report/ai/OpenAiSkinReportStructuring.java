@@ -84,12 +84,10 @@ public class OpenAiSkinReportStructuring implements SkinReportStructuringPort {
     private ExtractedSelections readSelections(JsonNode payload) {
         BodyArea primaryArea = readSingle(payload, "primaryArea", BodyArea::valueOf);
         CareAvailability careAvailability = readSingle(payload, "careAvailability", CareAvailability::valueOf);
-        Set<Appearance> appearances = withoutExclusiveConflict(
-                readMultiple(payload, "appearances", Appearance::valueOf), Appearance.UNSURE
-        );
-        Set<Sensation> sensations = withoutExclusiveConflict(
-                readMultiple(payload, "sensations", Sensation::valueOf), Sensation.NONE
-        );
+        // 겉모습과 느껴지는 불편에는 단독 선택 값이 없다. 명세 v2_1에서 두 그룹의 "모름/없음"이
+        // 사라져 모순 조합 자체가 생기지 않으므로 그대로 받는다.
+        Set<Appearance> appearances = readMultiple(payload, "appearances", Appearance::valueOf);
+        Set<Sensation> sensations = readMultiple(payload, "sensations", Sensation::valueOf);
         Set<Situation> situations = withoutExclusiveConflict(
                 readMultiple(payload, "situations", Situation::valueOf), Situation.NONE_RECALLED
         );

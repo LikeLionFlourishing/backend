@@ -109,7 +109,7 @@ public class SkinReportSubmissionService {
         Set<Sensation> sensations = confirmed.sensationSet();
         Set<Situation> situations = confirmed.situationSet();
         Set<PreCareCheck> preCareChecks = request.preCareCheckSet();
-        SkinReportPolicy.assertExclusiveSelections(appearances, sensations, situations, preCareChecks);
+        SkinReportPolicy.assertExclusiveSelections(situations, preCareChecks);
 
         LocalDate reportDate = SkinReportPolicy.today(clock);
         Object fingerprint = fingerprintOf(
@@ -127,7 +127,7 @@ public class SkinReportSubmissionService {
 
         ResultType resultType = SkinReportPolicy.decideResultType(preCareChecks);
         SimilarExperienceLookup lookup = similarExperienceFinder.lookup(userId, reportDate, new SimilarExperienceQuery(
-                confirmed.primaryArea(), appearances, sensations, situations, resultType
+                confirmed.primaryArea(), appearances, sensations, situations, confirmed.careAvailability()
         ));
         ScoredSimilarExperience similarExperience = lookup.found()
                 .map(FoundSimilarExperience::scored)

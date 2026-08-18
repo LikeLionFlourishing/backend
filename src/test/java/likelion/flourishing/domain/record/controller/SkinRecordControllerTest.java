@@ -128,8 +128,8 @@ class SkinRecordControllerTest {
                 REPORT_ID,
                 LocalDate.of(2026, 8, 15),
                 BodyArea.RIGHT_CHIN,
-                List.of(Appearance.REDNESS),
-                List.of(Sensation.STINGING_BURNING),
+                List.of(Appearance.APP_REDNESS),
+                List.of(Sensation.REDNESS),
                 List.of(Situation.SHAVING),
                 ResultType.SELF_CARE_GUIDE,
                 ReportStatus.FOLLOW_UP_PENDING,
@@ -142,8 +142,8 @@ class SkinRecordControllerTest {
     }
 
     private SkinReportDetailResponse detailResponse() {
-        List<Appearance> appearances = List.of(Appearance.REDNESS);
-        List<Sensation> sensations = List.of(Sensation.STINGING_BURNING);
+        List<Appearance> appearances = List.of(Appearance.APP_REDNESS);
+        List<Sensation> sensations = List.of(Sensation.REDNESS);
         List<Situation> situations = List.of(Situation.SHAVING);
         ConfirmedStructuredReportResponse confirmed = ConfirmedStructuredReportResponse.of(
                 BodyArea.RIGHT_CHIN,

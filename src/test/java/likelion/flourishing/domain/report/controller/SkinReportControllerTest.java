@@ -60,8 +60,8 @@ class SkinReportControllerTest {
               "rawText": "오른쪽 턱이 빨갛고 따가워요.",
               "confirmed": {
                 "primaryArea": "RIGHT_CHIN",
-                "appearances": ["REDNESS"],
-                "sensations": ["STINGING_BURNING"],
+                "appearances": ["APP_REDNESS"],
+                "sensations": ["REDNESS"],
                 "situations": ["SHAVING"],
                 "careAvailability": "ALREADY_WASHED"
               },
@@ -191,7 +191,7 @@ class SkinReportControllerTest {
                                   "confirmed": {
                                     "primaryArea": "RIGHT_CHIN",
                                     "appearances": [],
-                                    "sensations": ["NONE"],
+                                    "sensations": ["BREAKOUT"],
                                     "situations": ["NONE_RECALLED"],
                                     "careAvailability": "ALREADY_WASHED"
                                   },

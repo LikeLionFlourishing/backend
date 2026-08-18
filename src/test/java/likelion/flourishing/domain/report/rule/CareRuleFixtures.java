@@ -59,7 +59,7 @@ public final class CareRuleFixtures {
                 "붉은 자리를 건드리지 않고 진정에 집중해 주세요.",
                 List.of(),
                 List.of(new RuleConditionSpec(
-                        1, RuleConditionField.APPEARANCES, RuleOperator.CONTAINS, Appearance.REDNESS.name(), false
+                        1, RuleConditionField.APPEARANCES, RuleOperator.CONTAINS, Appearance.APP_REDNESS.name(), false
                 )),
                 List.of(
                         action("0198a31f-f33f-7000-8000-0000000000b1", RuleActionType.DO_TODAY, "찬 물수건으로 진정하기", 50, 1),
@@ -130,8 +130,8 @@ public final class CareRuleFixtures {
     public static RuleEvaluationFacts selfCareFacts() {
         return new RuleEvaluationFacts(
                 BodyArea.RIGHT_CHIN,
-                Set.of(Appearance.REDNESS),
-                Set.of(Sensation.STINGING_BURNING),
+                Set.of(Appearance.APP_REDNESS),
+                Set.of(Sensation.REDNESS),
                 Set.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED,
                 Set.of(PreCareCheck.NONE),
@@ -143,8 +143,8 @@ public final class CareRuleFixtures {
     public static RuleEvaluationFacts clinicianCheckFacts() {
         return new RuleEvaluationFacts(
                 BodyArea.RIGHT_CHIN,
-                Set.of(Appearance.REDNESS),
-                Set.of(Sensation.PAIN_AT_REST),
+                Set.of(Appearance.APP_REDNESS),
+                Set.of(Sensation.BREAKOUT),
                 Set.of(Situation.SHAVING),
                 CareAvailability.ALREADY_WASHED,
                 Set.of(PreCareCheck.PUS_OOZING_BLISTER),
