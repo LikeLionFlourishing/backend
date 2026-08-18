@@ -178,14 +178,51 @@ MySQL, Redis 는 컨테이너 네트워크 안에만 열려 있으며, 인증서
 
 ## API 문서
 
-애플리케이션 실행 후 다음 경로를 사용합니다.
+구현에서 추출한 명세가 [docs/openapi.generated.json](docs/openapi.generated.json)에 있습니다.
+운영 서버는 문서 경로를 닫아 두므로 프런트엔드는 이 파일을 기준으로 개발합니다. 경로 18개,
+오퍼레이션 23개가 들어 있고, 보안 스키마로 세션 쿠키(`__Host-session`)와 `X-CSRF-Token` 헤더가
+정의되어 있으며 `servers` 에 운영과 로컬 주소가 함께 있습니다.
+
+설계 계약 문서(`docs/openapi.yaml`)와는 역할이 다릅니다. 그쪽은 무엇을 만들 것인지 합의한
+계약이고 저장소에는 넣지 않습니다(`.gitignore`). 이 파일은 실제로 무엇이 구현되어 있는지를
+보여 줍니다. 둘이 어긋나면 구현이나 계약 중 하나를 고쳐야 한다는 신호입니다.
+
+파일을 열어 보는 방법은 두 가지입니다.
+
+- [Swagger Editor](https://editor.swagger.io)에 파일을 그대로 올립니다.
+- 로컬에서 Swagger UI 컨테이너로 띄웁니다.
+
+```bash
+docker run --rm -p 8081:8080 \
+  -e SWAGGER_JSON=/spec/openapi.generated.json \
+  -v "$(pwd)/docs:/spec:ro" \
+  swaggerapi/swagger-ui
+```
+
+애플리케이션을 직접 실행했다면 아래 경로도 씁니다.
 
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 
 운영 프로파일(`SPRING_PROFILES_ACTIVE=prod`)에서는 두 경로를 닫습니다. `SecurityConfig` 의
-공개 경로 목록에 들어 있어 켜 두면 인증 없이 열리고, 명세는 저장소와 팀 문서에 있으므로
-서버에서 다시 내보낼 이유가 없습니다.
+공개 경로 목록에 들어 있어 켜 두면 인증 없이 열리기 때문입니다.
+
+### 명세 파일 갱신
+
+엔드포인트나 DTO 를 바꾸면 파일도 함께 갱신합니다. 코드가 바뀌었는데 파일이 그대로면 프런트엔드가
+옛 명세를 보게 됩니다.
+
+```bash
+# 1. 로컬에 애플리케이션을 띄운다 (운영 프로파일이 아니어야 문서가 열린다)
+docker compose up -d mysql-db redis
+COMPOSE_FILE=docker-compose.yml ./scripts/apply-db.sh --schema
+docker compose --profile app up -d --build
+
+# 2. 문서를 받아 저장한다
+./scripts/export-openapi.sh
+```
+
+다른 포트에서 받으려면 `BASE_URL` 을 줍니다. 예: `BASE_URL=http://localhost:18080 ./scripts/export-openapi.sh`
 
 ## 주요 환경변수
 
