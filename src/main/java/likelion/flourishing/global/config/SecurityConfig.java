@@ -39,6 +39,10 @@ public class SecurityConfig {
             "/v3/api-docs/**"
     };
 
+    private static final String[] AUTHENTICATED_GET_PATHS = {
+            "/v1/reference-data/**"
+    };
+
     /**
      * 인증은 세션 쿠키로만 하고, 상태 변경 요청의 CSRF 검증은 명세대로 X-CSRF-Token 헤더로 한다.
      * Spring Security 기본 CSRF 토큰 저장소는 쓰지 않으므로 끄고 {@link SessionAuthenticationFilter}가 대신 검증한다.
@@ -77,6 +81,23 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/v1/sessions").permitAll()
                         .requestMatchers(HttpMethod.POST, "/v1/analytics-events").authenticated()
                         .requestMatchers("/v1/sessions/current", "/v1/me").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/v1/me/onboarding").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/v1/home").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/v1/daily-check-ins/*").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/v1/me/notification-settings").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/v1/me/notification-settings").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/v1/push-subscriptions").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/v1/push-subscriptions/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/v1/report-interpretations").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/v1/skin-reports").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/v1/skin-reports").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/v1/skin-reports/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/v1/skin-reports/*/care-guide-generations")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.GET, "/v1/skin-reports/*/follow-up").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/v1/skin-reports/*/follow-up").authenticated()
+                        // 명세상 이 리소스는 GET만 정의되어 있다. 메서드를 명시해 나머지는 denyAll()로 떨어뜨린다.
+                        .requestMatchers(HttpMethod.GET, AUTHENTICATED_GET_PATHS).authenticated()
                         .anyRequest().denyAll()
                 )
                 .formLogin(formLogin -> formLogin.disable())

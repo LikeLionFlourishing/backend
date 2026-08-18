@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -164,6 +165,58 @@ class SecurityFilterChainTest {
     void pathOutsideTheWhitelistIsDenied() throws Exception {
         mockMvc.perform(get("/v1/not-registered-yet"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void notificationEndpointsRequireAuthentication() throws Exception {
+        mockMvc.perform(get("/v1/me/notification-settings"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+
+        mockMvc.perform(patch("/v1/me/notification-settings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enabled\":true}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+
+        mockMvc.perform(post("/v1/push-subscriptions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+
+        mockMvc.perform(delete("/v1/push-subscriptions/0198a31f-f33f-7000-8000-0000000000a1"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+    }
+
+    /**
+     * 상태 변경 요청은 세션 쿠키만으로는 통과하지 못한다.
+     *
+     * <p>구독 등록은 POST라 CSRF 토큰 검증 대상이다. 필터가 토큰을 확인하는지 여기서 본다.
+     */
+    @Test
+    void pushSubscriptionRegistrationRequiresCsrfToken() throws Exception {
+        when(sessionService.authenticate(eq(SESSION_TOKEN), eq("POST"), isNull()))
+                .thenThrow(new BusinessException(ErrorCode.CSRF_TOKEN_INVALID));
+
+        mockMvc.perform(post("/v1/push-subscriptions")
+                        .cookie(sessionCookie())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+    }
+
+    @Test
+    void skinRecordQueriesRequireAuthentication() throws Exception {
+        mockMvc.perform(get("/v1/skin-reports"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+
+        mockMvc.perform(get("/v1/skin-reports/0198a31f-f33f-7000-8000-000000000001"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
     }
 
     /**

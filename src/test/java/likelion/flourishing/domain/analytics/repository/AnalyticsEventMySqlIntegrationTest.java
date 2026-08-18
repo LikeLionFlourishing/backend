@@ -42,6 +42,12 @@ class AnalyticsEventMySqlIntegrationTest {
         registry.add("spring.datasource.username", MYSQL::getUsername);
         registry.add("spring.datasource.password", MYSQL::getPassword);
         registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
+        // 이 테스트가 쓰지 않는 도메인의 키다. @SpringBootTest 가 전체 컨텍스트를 띄우므로
+        // 기록 암호화와 푸시 비밀 암호화 빈이 함께 만들어지고, 키가 없으면 생성자에서 막힌다.
+        registry.add("app.records.crypto.master-key",
+                () -> "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+        registry.add("app.notifications.crypto.master-key",
+                () -> "OTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTBmZWRjYmE=");
     }
 
     @Autowired

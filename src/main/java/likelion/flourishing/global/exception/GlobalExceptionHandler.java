@@ -20,6 +20,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
  * 컨트롤러에서 빠져나온 예외를 모두 명세 Problem 형식(application/problem+json)으로 바꾼다.
@@ -99,7 +100,18 @@ public class GlobalExceptionHandler {
         return problem(ErrorCode.VALIDATION_ERROR, request, errors);
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, MissingRequestHeaderException.class})
+    /**
+     * 본문·헤더·경로 값을 읽지 못한 요청. 객체를 만들기 전에 실패한 것이라 422가 아니라 400이다.
+     *
+     * <p>MethodArgumentTypeMismatchException은 경로나 쿼리 값이 타입에 맞지 않을 때 난다.
+     * 예를 들어 /v1/daily-check-ins/2026-13-99처럼 날짜가 될 수 없는 문자열이 오는 경우다.
+     * 여기서 받지 않으면 아래 Exception 처리기로 흘러가 500이 된다.
+     */
+    @ExceptionHandler({
+            HttpMessageNotReadableException.class,
+            MissingRequestHeaderException.class,
+            MethodArgumentTypeMismatchException.class
+    })
     public ResponseEntity<ErrorResponse> handleMalformedRequest(
             Exception exception,
             HttpServletRequest request

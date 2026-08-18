@@ -27,6 +27,18 @@ public enum ErrorCode {
     ),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "접근 거부", "이 요청을 수행할 권한이 없습니다."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "NOT_FOUND", "리소스 없음", "요청한 리소스를 찾을 수 없습니다."),
+    RESOURCE_NOT_FOUND(
+            HttpStatus.NOT_FOUND,
+            "RESOURCE_NOT_FOUND",
+            "리소스 없음",
+            "요청한 리소스를 찾을 수 없습니다."
+    ),
+    INVALID_CURSOR(
+            HttpStatus.BAD_REQUEST,
+            "INVALID_CURSOR",
+            "잘못된 커서",
+            "기록 목록 커서가 올바르지 않습니다."
+    ),
     METHOD_NOT_ALLOWED(
             HttpStatus.METHOD_NOT_ALLOWED,
             "METHOD_NOT_ALLOWED",
@@ -51,6 +63,96 @@ public enum ErrorCode {
             "삭제 확인 필요",
             "계정 삭제를 확인하는 헤더가 올바르지 않습니다."
     ),
+    CHECK_IN_DATE_NOT_TODAY(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "CHECK_IN_DATE_NOT_TODAY",
+            "저장할 수 없는 날짜",
+            "오늘 날짜만 저장할 수 있습니다."
+    ),
+    CHECK_IN_STATE_NOT_ALLOWED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "CHECK_IN_STATE_NOT_ALLOWED",
+            "저장할 수 없는 상태",
+            "이 요청으로는 불편 없음만 저장할 수 있습니다."
+    ),
+    CHECK_IN_ALREADY_REPORTED(
+            HttpStatus.CONFLICT,
+            "CHECK_IN_ALREADY_REPORTED",
+            "이미 보고된 날",
+            "피부 보고가 저장된 날은 불편 없음으로 바꿀 수 없습니다."
+    ),
+    FOLLOW_UP_KIND_MISMATCH(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "FOLLOW_UP_KIND_MISMATCH",
+            "경과 종류 불일치",
+            "이 보고에 맞지 않는 경과 종류입니다."
+    ),
+    FOLLOW_UP_NOT_AVAILABLE_YET(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "FOLLOW_UP_NOT_AVAILABLE_YET",
+            "아직 입력할 수 없음",
+            "경과는 다음 날부터 입력할 수 있습니다."
+    ),
+    FOLLOW_UP_EXPIRED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "FOLLOW_UP_EXPIRED",
+            "입력 기한 지남",
+            "경과 입력 기한이 지났습니다."
+    ),
+    FOLLOW_UP_ALREADY_SUBMITTED(
+            HttpStatus.CONFLICT,
+            "FOLLOW_UP_ALREADY_SUBMITTED",
+            "이미 저장된 경과",
+            "이미 저장한 경과는 다른 내용으로 바꿀 수 없습니다."
+    ),
+    CONSENT_REQUIRED(
+            HttpStatus.FORBIDDEN,
+            "CONSENT_REQUIRED",
+            "동의 필요",
+            "민감정보 동의를 완료해야 이용할 수 있습니다."
+    ),
+    SELECTION_COMBINATION_INVALID(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "SELECTION_COMBINATION_INVALID",
+            "선택값 조합 오류",
+            "함께 고를 수 없는 선택값이 있습니다."
+    ),
+    REPORT_ALREADY_EXISTS(
+            HttpStatus.CONFLICT,
+            "REPORT_ALREADY_EXISTS",
+            "이미 저장된 보고",
+            "같은 날짜의 피부 보고는 하루 한 번만 저장할 수 있습니다."
+    ),
+    IDEMPOTENCY_KEY_REUSED(
+            HttpStatus.CONFLICT,
+            "IDEMPOTENCY_KEY_REUSED",
+            "멱등성 키 재사용",
+            "같은 키를 다른 요청에 다시 쓸 수 없습니다."
+    ),
+    AI_RETRY_NOT_AVAILABLE(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "AI_RETRY_NOT_AVAILABLE",
+            "재생성할 수 없는 결과",
+            "이 결과는 관리 설명을 다시 만들 수 없습니다."
+    ),
+    AI_RETRY_ALREADY_USED(
+            HttpStatus.CONFLICT,
+            "AI_RETRY_ALREADY_USED",
+            "재생성 횟수 초과",
+            "관리 설명 재생성은 한 번만 할 수 있습니다."
+    ),
+    CONSENT_VERSION_NOT_ACCEPTED(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "CONSENT_VERSION_NOT_ACCEPTED",
+            "동의서 버전 불일치",
+            "현재 받고 있는 동의서 버전이 아닙니다. 최신 동의 화면에서 다시 진행해 주세요."
+    ),
+    FEATURE_NOT_AVAILABLE(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "FEATURE_NOT_AVAILABLE",
+            "아직 제공하지 않는 기능",
+            "이 항목은 아직 바꿀 수 없습니다."
+    ),
     TOO_MANY_REQUESTS(
             HttpStatus.TOO_MANY_REQUESTS,
             "TOO_MANY_REQUESTS",
@@ -66,6 +168,18 @@ public enum ErrorCode {
     RATE_LIMIT_UNAVAILABLE(
             HttpStatus.SERVICE_UNAVAILABLE,
             "RATE_LIMIT_UNAVAILABLE",
+            "일시적으로 처리할 수 없음",
+            "요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."
+    ),
+    RULE_ENGINE_UNAVAILABLE(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "RULE_ENGINE_UNAVAILABLE",
+            "관리 규칙 준비 중",
+            "관리 기준을 확인할 수 없어 결과를 만들지 못했습니다. 잠시 후 다시 시도해 주세요."
+    ),
+    SERVICE_UNAVAILABLE(
+            HttpStatus.SERVICE_UNAVAILABLE,
+            "SERVICE_UNAVAILABLE",
             "일시적으로 처리할 수 없음",
             "요청을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."
     );
