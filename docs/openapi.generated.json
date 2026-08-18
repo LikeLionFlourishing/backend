@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "관리하는 행보관 API",
+    "title": "제대로 API",
     "description": "현역 장병용 피부 셀프케어 PWA API",
     "version": "v1"
   },
