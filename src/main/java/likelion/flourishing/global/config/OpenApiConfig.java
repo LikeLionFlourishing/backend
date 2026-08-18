@@ -5,6 +5,8 @@ import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -21,6 +23,12 @@ public class OpenApiConfig {
                         .title("관리하는 행보관 API")
                         .version("v1")
                         .description("현역 장병용 피부 셀프케어 PWA API"))
+                // 서버 목록을 직접 정한다. 비워 두면 springdoc 이 요청 주소로 채우는데,
+                // 그러면 저장소에 담아 둔 docs/openapi.json 에 뽑아낸 사람의 로컬 주소가 박힌다.
+                .servers(List.of(
+                        new Server().url("https://api.flourishing.o-r.kr").description("운영"),
+                        new Server().url("http://localhost:8080").description("로컬")
+                ))
                 .components(new Components()
                         .addSecuritySchemes(COOKIE_AUTH, new SecurityScheme()
                                 .type(SecurityScheme.Type.APIKEY)
