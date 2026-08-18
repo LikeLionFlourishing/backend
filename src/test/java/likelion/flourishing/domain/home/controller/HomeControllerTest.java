@@ -75,7 +75,7 @@ class HomeControllerTest {
                 .andExpect(jsonPath("$.today").doesNotExist())
                 .andExpect(jsonPath("$.recentReport.id").value(REPORT_ID.toString()))
                 .andExpect(jsonPath("$.recentReport.primaryArea").value("RIGHT_CHIN"))
-                .andExpect(jsonPath("$.recentReport.appearances[0]").value("REDNESS"));
+                .andExpect(jsonPath("$.recentReport.appearances[0]").value("APP_REDNESS"));
     }
 
     @Test
@@ -168,8 +168,8 @@ class HomeControllerTest {
                         REPORT_ID,
                         TODAY.minusDays(1),
                         "RIGHT_CHIN",
-                        List.of("REDNESS"),
-                        List.of("ITCHING"),
+                        List.of("APP_REDNESS"),
+                        List.of("BREAKOUT"),
                         List.of("SHAVING"),
                         "SELF_CARE_GUIDE",
                         "FOLLOW_UP_PENDING",

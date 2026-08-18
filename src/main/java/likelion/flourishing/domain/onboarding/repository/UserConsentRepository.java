@@ -20,4 +20,13 @@ public interface UserConsentRepository extends JpaRepository<UserConsent, UUID> 
             ConsentType consentType,
             String consentVersion
     );
+
+    /**
+     * 해당 종류의 동의를 한 번이라도 남겼는지.
+     *
+     * <p>동의가 필요한 기능이 요청을 받아들일지 판단할 때 쓴다. 버전은 보지 않는다. 문구가 바뀌어
+     * 재동의를 받아야 하는지는 다시 동의를 요구하는 별도 정책이고, 여기서 막을 일은 아직 아무
+     * 동의도 하지 않은 요청이다.
+     */
+    boolean existsByUserIdAndConsentType(UUID userId, ConsentType consentType);
 }

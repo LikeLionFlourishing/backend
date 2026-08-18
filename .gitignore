@@ -11,6 +11,7 @@ src/main/generated/
 .project
 .settings/
 .vscode/
+.kiro/
 
 .DS_Store
 
@@ -22,6 +23,9 @@ src/main/generated/
 
 application-private.yml
 application-secret.yml
+
+# 확정 API 명세. 원본은 팀 문서에 있고 저장소에는 대조용 사본만 로컬에 둔다.
+docs/openapi.yaml
 
 docker/mysql/
 logs/

@@ -25,52 +25,71 @@ class SkinReportOptionEnumTest {
                 );
     }
 
+    /**
+     * 명세 v2_1의 AppearanceSelection은 enum이 비어 있고, 이 여섯 개는 팀이 따로 확정한 값이다.
+     * 명세 TODO와 어긋나는 지점 셋은 이슈 #28에서 확인 중이라 값이 바뀔 수 있다.
+     */
     @Test
     void appearancesMatchApiContract() {
         assertThat(Arrays.stream(Appearance.values()).map(Enum::name))
                 .containsExactly(
-                        "REDNESS", "SMALL_BUMPS", "WHITE_TIPPED_BUMPS",
-                        "RED_BUMPS_AROUND_HAIR", "ROUGHNESS_FLAKING",
-                        "OOZING", "CRUST", "UNSURE"
+                        "APP_REDNESS", "APP_BUMP", "APP_PUS_BUMP",
+                        "APP_DRYNESS", "APP_OILINESS", "APP_OTHER"
                 );
         assertThat(Arrays.stream(Appearance.values()).map(Appearance::getLabel))
                 .containsExactly(
-                        "붉어짐", "작은 돌기", "하얀 끝이 보이는 돌기",
-                        "털 주변의 붉은 돌기", "거칠어짐·각질",
-                        "진물", "딱지", "잘 모르겠음"
+                        "붉어짐", "돌기·울퉁불퉁함", "고름이 찬 돌기",
+                        "건조·각질", "번들거림·유분", "기타"
                 );
     }
 
+    /** v1 감각 7개는 v2_1 불편 유형 3개로 전면 대체됐다. 값 사이에 대응 관계가 없다. */
     @Test
     void sensationsMatchApiContract() {
         assertThat(Arrays.stream(Sensation.values()).map(Enum::name))
-                .containsExactly(
-                        "ITCHING", "STINGING_BURNING", "PAIN_WHEN_PRESSED",
-                        "PAIN_AT_REST", "HEAT", "TIGHTNESS", "NONE"
-                );
+                .containsExactly("REDNESS", "EXCESS_SEBUM", "BREAKOUT");
         assertThat(Arrays.stream(Sensation.values()).map(Sensation::getLabel))
-                .containsExactly(
-                        "가려움", "따가움·화끈거림", "누르면 아픔",
-                        "가만히 있어도 아픔", "열감", "당김", "특별한 느낌 없음"
-                );
+                .containsExactly("붉어짐", "피지 과다 분비", "트러블");
     }
 
     @Test
     void situationsMatchApiContract() {
         assertThat(Arrays.stream(Situation.values()).map(Enum::name))
                 .containsExactly(
-                        "SHAVING", "SWEAT_OR_DUST_AFTER_TRAINING",
-                        "PROTECTIVE_GEAR_OR_MASK", "DELAYED_WASHING",
-                        "NEW_PRODUCT", "TOUCHED_OR_SQUEEZED",
-                        "SLEEP_DEPRIVATION", "OTHER", "NONE_RECALLED"
+                        "PROTECTIVE_GEAR_OR_MASK", "SHAVING", "SQUEEZED_ACNE",
+                        "NEW_PRODUCT", "SWEAT_OR_SEBUM", "NONE_RECALLED"
                 );
         assertThat(Arrays.stream(Situation.values()).map(Situation::getLabel))
                 .containsExactly(
-                        "면도", "훈련·운동 후 땀 또는 먼지",
-                        "보호장비·마스크 착용", "세안·샤워 지연",
-                        "새로운 제품 사용", "피부를 만지거나 짬",
-                        "수면 부족", "기타", "특별히 떠오르는 상황 없음"
+                        "보호장비·마스크 착용", "면도", "여드름을 짬",
+                        "새 제품 사용", "땀·과피지", "해당 상황 없음"
                 );
+    }
+
+    /** v1 값이 되살아나면 계약이 깨진다. 마이그레이션 대상이라 이름으로 고정해 둔다. */
+    @Test
+    void valuesRemovedInSpecV2AreGone() {
+        assertThat(Arrays.stream(Sensation.values()).map(Enum::name))
+                .doesNotContain("ITCHING", "STINGING_BURNING", "PAIN_WHEN_PRESSED",
+                        "PAIN_AT_REST", "HEAT", "TIGHTNESS", "NONE");
+        assertThat(Arrays.stream(Situation.values()).map(Enum::name))
+                .doesNotContain("DELAYED_WASHING", "SLEEP_DEPRIVATION", "OTHER",
+                        "SWEAT_OR_DUST_AFTER_TRAINING", "TOUCHED_OR_SQUEEZED");
+    }
+
+    /** 선택 개수 상한은 명세가 정한 값이다. 검증 코드가 이 상수를 참조한다. */
+    @Test
+    void selectionLimitsMatchApiContract() {
+        assertThat(Sensation.MAX_SELECTIONS).isEqualTo(3);
+        assertThat(Situation.MAX_SELECTIONS).isEqualTo(5);
+        assertThat(Appearance.MAX_SELECTIONS).isEqualTo(6);
+    }
+
+    /** NONE_RECALLED는 단독 선택이다. 다른 상황과 함께 고를 수 없다. */
+    @Test
+    void onlyNoneRecalledIsExclusiveAmongSituations() {
+        assertThat(Arrays.stream(Situation.values()).filter(Situation::isExclusive))
+                .containsExactly(Situation.NONE_RECALLED);
     }
 
     @Test
