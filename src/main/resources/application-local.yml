@@ -13,3 +13,10 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+
+app:
+  auth:
+    session:
+      # 로컬은 HTTP라 Secure 쿠키를 브라우저가 저장하지 않으므로 __Host- 접두사를 뗀다.
+      cookie-name: ${SESSION_COOKIE_NAME:session}
+      secure: ${SESSION_COOKIE_SECURE:false}

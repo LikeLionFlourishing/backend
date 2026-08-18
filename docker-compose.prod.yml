@@ -1,0 +1,134 @@
+# 운영 배포용 구성. 로컬 개발은 docker-compose.yml 을 쓴다.
+#
+# 두 파일을 나눈 이유는 노출 범위가 정반대라는 것이다. 로컬 구성은 MySQL 포트를 호스트에
+# 열어 IDE 에서 붙게 하고, 운영 구성은 프록시만 바깥을 향하고 나머지는 내부 네트워크에 둔다.
+# 한 파일에 프로필로 섞으면 어느 쪽이 열려 있는지 읽기 어려워진다.
+#
+# 실행
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# 필요한 환경변수는 .env.example 을 참고해 서버의 .env 에 채운다. 비어 있으면 기동 전에 멈춘다.
+
+services:
+  # 도메인 기반 자동 HTTPS. 인증서 발급과 갱신을 Caddy 에 맡긴다.
+  # 80 포트를 함께 열어 두는 것은 ACME HTTP-01 검증과 HTTPS 리다이렉트에 쓰기 때문이다.
+  proxy:
+    image: caddy:2-alpine
+    container_name: flourishing-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 발급받은 인증서를 볼륨에 남긴다. 컨테이너를 다시 만들 때마다 재발급하면
+      # Let's Encrypt 발급 한도에 걸린다.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: flourishing-app
+    # 포트를 열지 않는다. 바깥에서 오는 요청은 프록시만 받는다.
+    expose:
+      - "8080"
+    environment:
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db:3306/flourishing?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_PROFILES_ACTIVE: prod
+
+      # 기록 원문·커서와 Push 구독 비밀을 푸는 키. 없으면 빈 생성 단계에서 기동에 실패하므로
+      # 여기서 먼저 멈추게 한다.
+      RECORD_DATA_ENCRYPTION_KEY: ${RECORD_DATA_ENCRYPTION_KEY:?RECORD_DATA_ENCRYPTION_KEY is required}
+      PUSH_DATA_ENCRYPTION_KEY: ${PUSH_DATA_ENCRYPTION_KEY:?PUSH_DATA_ENCRYPTION_KEY is required}
+
+      # 프런트엔드 출처. 쉼표로 여러 개를 줄 수 있다. 여기에 없는 출처의 브라우저 요청은 막힌다.
+      FRONTEND_ALLOWED_ORIGINS: ${FRONTEND_ALLOWED_ORIGINS:?FRONTEND_ALLOWED_ORIGINS is required}
+      PROBLEM_BASE_URI: https://${APP_DOMAIN:?APP_DOMAIN is required}/problems
+
+      # 프런트엔드가 API 와 다른 등록 도메인에 있으면 Lax 쿠키는 fetch 에 실리지 않는다.
+      # 그 배포에서는 None 으로 올린다. 브라우저가 Secure 를 함께 요구하는데 HTTPS 라 충족된다.
+      SESSION_COOKIE_SAME_SITE: ${SESSION_COOKIE_SAME_SITE:-Lax}
+
+      # VAPID 키가 없어도 앱은 뜨고 17:30 발송 작업만 건너뛴다.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+
+      # AI 키가 없으면 관리 설명이 규칙 문구로 대체되고 결과는 계속 나간다. 필수로 두지 않는다.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    healthcheck:
+      # 프록시가 이 상태를 기다린다. DB 스키마가 맞지 않으면 기동에서 실패하므로
+      # 여기서 걸리면 앱 로그를 먼저 본다.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mysql-db:
+    image: mysql:8.0
+    container_name: flourishing-mysql
+    # 포트를 열지 않는다. 앱만 내부 네트워크로 붙는다.
+    expose:
+      - "3306"
+    environment:
+      MYSQL_DATABASE: flourishing
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      TZ: UTC
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 볼륨이 비어 있는 첫 기동에만 실행된다. 파일 이름 순서대로 적용되므로
+      # 스키마 다음에 시드가 온다. 이미 데이터가 있는 볼륨에서는 실행되지 않으니
+      # 그때는 scripts/apply-db.sh 를 쓴다.
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+      - ./db/seed/20260818_guide_sections.sql:/docker-entrypoint-initdb.d/002-guide-sections.sql:ro
+      - ./db/seed/20260818_care_rules_v0_3.sql:/docker-entrypoint-initdb.d/003-care-rules.sql:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: flourishing-redis
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    # 세션과 요청 제한 카운터가 들어간다. 재시작에 사라지면 전원 로그아웃이 되므로 남긴다.
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

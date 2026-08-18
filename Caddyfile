@@ -1,0 +1,35 @@
+# 운영 리버스 프록시 설정. docker-compose.prod.yml 의 proxy 서비스가 읽는다.
+#
+# Caddy 는 도메인이 적혀 있으면 Let's Encrypt 인증서를 자동으로 받고 갱신한다. 그래서 인증서
+# 파일 경로를 여기 쓰지 않는다. 첫 기동 때 도메인의 A 레코드가 이 서버를 가리키고 80 포트가
+# 열려 있어야 발급이 끝난다.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	# 앱은 컨테이너 네트워크 안에서만 열려 있다.
+	reverse_proxy app:8080 {
+		# 앱이 프록시 뒤에 있다는 것을 알려 준다. 이 헤더가 없으면 애플리케이션이 보는
+		# 스킴이 http 가 되어 절대 URL 을 만들 때 어긋난다.
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	encode gzip
+
+	header {
+		# HTTPS 로만 접속하도록 브라우저에 알린다. Caddy 가 자동으로 넣어 주지 않는다.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		# 서버 종류를 알려 줄 이유가 없다.
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

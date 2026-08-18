@@ -1,0 +1,28 @@
+# 줄바꿈 정규화.
+#
+# gradlew 는 컨테이너 안에서 /bin/sh 이 실행하는 스크립트다. Windows 에서 클론하면
+# core.autocrlf 기본값(true)이 CRLF 로 바꿔 놓는데, 그러면 셰뱅이 "#!/bin/sh\r" 이 되어
+# 커널이 그런 이름의 인터프리터를 못 찾고 "./gradlew: not found" 로 빌드가 끊긴다.
+# 저장소 blob 은 LF 라서 리눅스 CI 와 클라우드 빌더에서는 드러나지 않는다.
+#
+# 이 파일을 추가한 뒤 이미 CRLF 로 받아 둔 사본은 한 번 정규화해야 한다.
+#   git add --renormalize . && git status
+# 또는 다시 클론한다.
+
+* text=auto
+
+# 컨테이너와 CI 가 실행하는 것들. 반드시 LF 여야 한다.
+gradlew         text eol=lf
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.sql           text eol=lf
+
+# Windows 에서 cmd 가 실행한다. CRLF 여야 한다.
+gradlew.bat     text eol=crlf
+*.bat           text eol=crlf
+
+# 바이너리로 다뤄 정규화 대상에서 뺀다.
+*.jar           binary
+*.png           binary
+*.jpg           binary
+*.ico           binary
