@@ -130,20 +130,22 @@ public class OnboardingWriter {
     }
 
     /**
-     * 저장할 알림 시각. 알림을 끈 요청은 피커 값을 함께 보냈더라도 기본 시각으로 저장한다.
+     * 저장할 알림 시각. 보낸 값이 있으면 알림을 껐더라도 그 값을 쓴다.
      *
      * <p>다음 날 경과 입력 가능 시점을 이 값으로 계산하기 때문에 알림을 끈 사용자에게도 필요하다.
      *
-     * <p>명세 {@code PUT /me/onboarding} 설명의 두 번째 갈래가 "알림을 받지 않을게요를 누른
-     * 경우에도 서버는 notificationTime을 기본값 17:30으로 저장한다"고 적고 있어 그대로 따른다.
-     * 스키마의 if/then은 {@code notificationEnabled: true} 갈래에만 걸려 있어
-     * {@code enabled=false} + {@code time="21:00"} 조합도 검증을 통과한다. 그 값을 그대로
-     * 저장하면 알림을 끈 사용자의 경과 입력이 21:00에 열려 명세와 갈리므로 여기서 떨어뜨린다.
+     * <p>예전에는 {@code enabled=false} 면 보낸 값을 버리고 기본 시각으로 덮었다. 명세의
+     * "이때도 서버는 notificationTime을 기본값 17:30으로 저장합니다" 를 근거로 삼았는데,
+     * 같은 명세의 {@code skipNotification} 예시가 이 필드를 아예 담지 않는다. 그 문장은
+     * 필드가 없을 때 무엇을 넣을지를 말한 것이지, 보낸 값을 버리라는 뜻이 아니다.
+     *
+     * <p>버리면 실제로 깨지는 경로가 있다. 푸시를 지원하지 않는 브라우저에서는 사용자가 시각을
+     * 고르고 `시작하기` 를 눌러도 구독 생성이 실패해 {@code enabled=false} 로 온다. 사용자는
+     * 분명히 21:00 을 골랐는데 경과 입력이 17:30 에 열린다.
      */
     private String notificationTimeOf(OnboardingRequest request) {
-        if (!request.notificationEnabled() || request.notificationTime() == null) {
-            return NotificationSetting.DEFAULT_TIME;
-        }
-        return request.notificationTime();
+        return request.notificationTime() == null
+                ? NotificationSetting.DEFAULT_TIME
+                : request.notificationTime();
     }
 }
