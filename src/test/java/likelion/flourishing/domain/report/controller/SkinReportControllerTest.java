@@ -57,6 +57,7 @@ class SkinReportControllerTest {
 
     private static final String VALID_BODY = """
             {
+              "reportDate": "2026-08-15",
               "rawText": "오른쪽 턱이 빨갛고 따가워요.",
               "confirmed": {
                 "primaryArea": "RIGHT_CHIN",
@@ -180,6 +181,31 @@ class SkinReportControllerTest {
                 .andExpect(jsonPath("$.code").value("RULE_ENGINE_UNAVAILABLE"));
     }
 
+    /** 명세가 reportDate 를 required 로 두었으므로 누락은 형식 오류다. */
+    @Test
+    void missingReportDateIsUnprocessable() throws Exception {
+        mockMvc.perform(post("/v1/skin-reports")
+                        .header("Idempotency-Key", IDEMPOTENCY_KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "rawText": "턱이 빨개요.",
+                                  "confirmed": {
+                                    "primaryArea": "RIGHT_CHIN",
+                                    "appearances": ["APP_REDNESS"],
+                                    "sensations": ["BREAKOUT"],
+                                    "situations": ["SHAVING"],
+                                    "careAvailability": "ALREADY_WASHED"
+                                  },
+                                  "preCareChecks": ["NONE"]
+                                }
+                                """)
+                        .with(authentication(authenticationToken())))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.errors[0].field").value("reportDate"));
+    }
+
     @Test
     void emptyMultiSelectionIsUnprocessable() throws Exception {
         mockMvc.perform(post("/v1/skin-reports")
@@ -187,6 +213,7 @@ class SkinReportControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
+                                  "reportDate": "2026-08-15",
                                   "rawText": "턱이 빨개요.",
                                   "confirmed": {
                                     "primaryArea": "RIGHT_CHIN",

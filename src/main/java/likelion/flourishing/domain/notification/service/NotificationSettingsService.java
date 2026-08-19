@@ -1,12 +1,16 @@
 package likelion.flourishing.domain.notification.service;
 
 import java.util.UUID;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
+import likelion.flourishing.domain.notification.dto.request.NotificationConsentInput;
 import likelion.flourishing.domain.notification.dto.request.UpdateNotificationSettingsRequest;
 import likelion.flourishing.domain.notification.dto.response.NotificationSettingsResponse;
 import likelion.flourishing.domain.notification.repository.PushSubscriptionRepository;
 import likelion.flourishing.domain.onboarding.dto.response.NotificationConsentResponse;
 import likelion.flourishing.domain.onboarding.entity.ConsentType;
+import likelion.flourishing.domain.onboarding.entity.UserConsent;
 import likelion.flourishing.domain.onboarding.repository.UserConsentRepository;
 import likelion.flourishing.global.exception.BusinessException;
 import likelion.flourishing.global.exception.ErrorCode;
@@ -41,17 +45,20 @@ public class NotificationSettingsService {
     private final PushSubscriptionRepository pushSubscriptionRepository;
     private final UserConsentRepository userConsentRepository;
     private final OnboardingProperties onboardingProperties;
+    private final Clock clock;
 
     public NotificationSettingsService(
             NotificationSettingRepository notificationSettingRepository,
             PushSubscriptionRepository pushSubscriptionRepository,
             UserConsentRepository userConsentRepository,
-            OnboardingProperties onboardingProperties
+            OnboardingProperties onboardingProperties,
+            Clock clock
     ) {
         this.notificationSettingRepository = notificationSettingRepository;
         this.pushSubscriptionRepository = pushSubscriptionRepository;
         this.userConsentRepository = userConsentRepository;
         this.onboardingProperties = onboardingProperties;
+        this.clock = clock;
     }
 
     /**
@@ -90,25 +97,37 @@ public class NotificationSettingsService {
      * 조합도 그대로 남는다. 실제 발송은 활성 구독 유무로 다시 걸러진다.
      */
     @Transactional
+    /**
+     * 부분 갱신. 보내지 않은 항목은 그대로 둔다.
+     *
+     * <p>동의를 먼저 반영한 뒤 켜기 여부를 판단한다. 한 요청으로 "동의하면서 켜기"가 되어야 하는데
+     * 순서를 뒤집으면 같은 요청 안의 동의를 보지 못하고 422가 난다.
+     */
     public NotificationSettingsResponse updateSettings(
             AuthenticatedUser principal,
             UpdateNotificationSettingsRequest request
     ) {
-        if (request.requestsTimeChange()) {
-            // 명세가 P0에서 이 요청을 422 FEATURE_NOT_AVAILABLE로 거부하도록 정한다.
-            throw new BusinessException(ErrorCode.FEATURE_NOT_AVAILABLE);
-        }
-
         UUID userId = principal.userId();
         NotificationSetting setting = notificationSettingRepository.findById(userId)
                 .orElseGet(() -> NotificationSetting.create(
                         userId,
-                        request.enabled(),
+                        false,
                         NotificationSetting.DEFAULT_TIME,
                         NotificationPermission.DEFAULT
                 ));
-        // 시각은 이 요청으로 바꾸지 않는다. 저장된 값을 그대로 다시 넣는다.
-        setting.update(request.enabled(), setting.getNotificationTime(), setting.getPermissionState());
+
+        if (request.requestsConsentChange()) {
+            applyConsent(userId, request.consent());
+        }
+        if (Boolean.TRUE.equals(request.enabled())) {
+            assertConsentOnRecord(userId);
+        }
+
+        setting.update(
+                request.requestsEnabledChange() ? request.enabled() : setting.isEnabled(),
+                request.requestsTimeChange() ? request.time() : setting.getNotificationTime(),
+                setting.getPermissionState()
+        );
 
         NotificationSetting saved = notificationSettingRepository.saveAndFlush(setting);
         return toResponse(
@@ -116,6 +135,51 @@ public class NotificationSettingsService {
                 describeConsent(userId),
                 pushSubscriptionRepository.countByUserIdAndActiveIsTrue(userId)
         );
+    }
+
+    /**
+     * 동의 기록을 갱신한다.
+     *
+     * <p>버전은 서버가 아는 활성 버전일 때만 받는다. 온보딩과 같은 규칙이다. 문구가 바뀌었는데
+     * 예전 버전 동의를 그대로 받으면 무엇에 동의한 것인지 증명할 수 없다.
+     */
+    private void applyConsent(UUID userId, NotificationConsentInput consent) {
+        String activeVersion = onboardingProperties.notificationConsentVersion();
+        if (!onboardingProperties.isActiveNotificationConsent(consent.version())) {
+            throw new BusinessException(ErrorCode.CONSENT_VERSION_NOT_ACCEPTED);
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        UserConsent stored = userConsentRepository
+                .findByUserIdAndConsentTypeAndConsentVersion(userId, ConsentType.NOTIFICATION, activeVersion)
+                .orElse(null);
+
+        if (Boolean.TRUE.equals(consent.agreed())) {
+            if (stored == null) {
+                userConsentRepository.save(
+                        UserConsent.accept(userId, ConsentType.NOTIFICATION, activeVersion, now)
+                );
+                return;
+            }
+            // 이미 동의한 상태면 최초 동의 시각을 유지한다. 온보딩도 같게 다룬다.
+            if (!stored.isAccepted()) {
+                stored.reaccept(now);
+                userConsentRepository.saveAndFlush(stored);
+            }
+            return;
+        }
+
+        if (stored != null && stored.isAccepted()) {
+            stored.withdraw(now);
+            userConsentRepository.saveAndFlush(stored);
+        }
+    }
+
+    /** 켜려면 이번 요청이든 이전 기록이든 활성 버전 동의가 있어야 한다. */
+    private void assertConsentOnRecord(UUID userId) {
+        if (!describeConsent(userId).agreed()) {
+            throw new BusinessException(ErrorCode.CONSENT_REQUIRED);
+        }
     }
 
     private NotificationSettingsResponse toResponse(
@@ -148,6 +212,7 @@ public class NotificationSettingsService {
         String activeVersion = onboardingProperties.notificationConsentVersion();
         return userConsentRepository
                 .findByUserIdAndConsentTypeAndConsentVersion(userId, ConsentType.NOTIFICATION, activeVersion)
+                .filter(UserConsent::isAccepted)
                 .map(NotificationConsentResponse::agreed)
                 .orElseGet(() -> NotificationConsentResponse.notAgreed(activeVersion));
     }

@@ -4,14 +4,15 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.dto.request.CreateSkinReportRequest;
-import likelion.flourishing.domain.report.dto.response.CareGuideResponse;
-import likelion.flourishing.domain.report.dto.response.SkinReportCreatedResponse;
+import likelion.flourishing.domain.record.dto.response.CareResultResponse;
+import likelion.flourishing.domain.record.dto.response.SkinReportDetailResponse;
 import likelion.flourishing.domain.report.idempotency.IdempotentResponse;
 import likelion.flourishing.domain.report.service.CareGuideRegenerationService;
 import likelion.flourishing.domain.report.service.SkinReportSubmissionService;
@@ -55,10 +56,18 @@ public class SkinReportController {
     }
 
     @Operation(summary = "피부 보고 생성")
-    @ApiResponse(
-            responseCode = "201",
-            content = @Content(schema = @Schema(implementation = SkinReportCreatedResponse.class))
-    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "피부 보고 및 결과 저장 완료",
+                    content = @Content(schema = @Schema(implementation = SkinReportDetailResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "같은 Idempotency-Key 로 재전송되어 기존 응답을 그대로 돌려줌",
+                    content = @Content(schema = @Schema(implementation = SkinReportDetailResponse.class))
+            )
+    })
     @PostMapping
     public ResponseEntity<String> create(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -72,7 +81,7 @@ public class SkinReportController {
     @Operation(summary = "관리 설명 재생성")
     @ApiResponse(
             responseCode = "200",
-            content = @Content(schema = @Schema(implementation = CareGuideResponse.class))
+            content = @Content(schema = @Schema(implementation = CareResultResponse.class))
     )
     @PostMapping("/{reportId}/care-guide-generations")
     public ResponseEntity<String> regenerateCareGuide(

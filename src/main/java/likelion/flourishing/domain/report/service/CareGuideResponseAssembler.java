@@ -12,8 +12,8 @@ import likelion.flourishing.domain.report.entity.ResultType;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import likelion.flourishing.domain.report.dto.response.CareGuideResponse;
-import likelion.flourishing.domain.report.dto.response.SimilarExperienceSummaryResponse;
+import likelion.flourishing.domain.record.dto.response.CareResultResponse;
+import likelion.flourishing.domain.record.dto.response.SimilarExperienceResponse;
 import likelion.flourishing.domain.report.entity.CareResult;
 import likelion.flourishing.domain.report.entity.CareResultItemType;
 import likelion.flourishing.domain.report.entity.MatchReason;
@@ -37,13 +37,13 @@ public class CareGuideResponseAssembler {
         this.guideSectionAssembler = guideSectionAssembler;
     }
 
-    public CareGuideResponse assemble(
+    public CareResultResponse assemble(
             CareResult careResult,
             String ruleVersion,
             List<CareRuleSnapshot> appliedRules,
             List<PlannedCareItem> items,
             List<PlannedIngredient> ingredients,
-            SimilarExperienceSummaryResponse similarExperience
+            SimilarExperienceResponse similarExperience
     ) {
         Map<CareResultItemType, List<String>> contentsByType = items.stream()
                 .sorted((left, right) -> Integer.compare(left.displayOrder(), right.displayOrder()))
@@ -86,7 +86,7 @@ public class CareGuideResponseAssembler {
                                 similarExperience != null
                         ));
 
-        return CareGuideResponse.of(
+        return CareResultResponse.of(
                 careResult.getResultType(),
                 List.copyOf(ruleCodes),
                 guideSections,

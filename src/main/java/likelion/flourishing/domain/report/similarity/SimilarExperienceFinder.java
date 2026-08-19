@@ -9,7 +9,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import likelion.flourishing.domain.followup.entity.FollowUp;
 import likelion.flourishing.domain.followup.repository.FollowUpRepository;
-import likelion.flourishing.domain.report.dto.response.SimilarExperienceSummaryResponse;
+import likelion.flourishing.domain.record.dto.response.SimilarExperienceResponse;
 import likelion.flourishing.domain.report.entity.CareResult;
 import likelion.flourishing.domain.report.entity.ReportStatus;
 import likelion.flourishing.domain.report.entity.SkinReport;
@@ -87,7 +87,7 @@ public class SimilarExperienceFinder {
 
         return Optional.of(new FoundSimilarExperience(
                 scored,
-                SimilarExperienceSummaryResponse.of(
+                SimilarExperienceResponse.of(
                         report.getId(),
                         report.getReportDate(),
                         scored.score(),
@@ -106,14 +106,14 @@ public class SimilarExperienceFinder {
      * <p>참조한 보고가 지워졌으면 빈 값이다. DDL이 similar_report_id를 NULL로 바꾸는 경우다.
      */
     @Transactional(readOnly = true)
-    public Optional<SimilarExperienceSummaryResponse> describe(UUID userId, UUID similarReportId, int score) {
+    public Optional<SimilarExperienceResponse> describe(UUID userId, UUID similarReportId, int score) {
         Optional<SkinReport> report = skinReportRepository.findByIdAndUserId(similarReportId, userId);
         Optional<CareResult> careResult = careResultRepository.findByReportIdAndUserId(similarReportId, userId);
         Optional<FollowUp> followUp = followUpRepository.findByReportIdAndUserId(similarReportId, userId);
         if (report.isEmpty() || careResult.isEmpty() || followUp.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(SimilarExperienceSummaryResponse.of(
+        return Optional.of(SimilarExperienceResponse.of(
                 similarReportId,
                 report.get().getReportDate(),
                 score,

@@ -1,6 +1,10 @@
 package likelion.flourishing.domain.auth.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -47,6 +51,11 @@ public class SessionController {
     }
 
     @Operation(summary = "로그인")
+    @ApiResponse(
+            responseCode = "201",
+            description = "로그인 완료",
+            content = @Content(schema = @Schema(implementation = AuthSessionResponse.class))
+    )
     @PostMapping
     public ResponseEntity<AuthSessionResponse> login(
             @Valid @RequestBody LoginRequest request,
@@ -67,6 +76,11 @@ public class SessionController {
     }
 
     @Operation(summary = "로그아웃")
+    @ApiResponse(
+            responseCode = "204",
+            description = "로그아웃 완료",
+            content = @Content
+    )
     @DeleteMapping("/current")
     public ResponseEntity<Void> deleteCurrentSession(@AuthenticationPrincipal AuthenticatedUser principal) {
         authService.logout(principal);

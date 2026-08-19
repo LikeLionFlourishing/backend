@@ -1,6 +1,10 @@
 package likelion.flourishing.domain.auth.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -51,6 +55,11 @@ public class UserController {
     }
 
     @Operation(summary = "이메일·비밀번호 회원가입")
+    @ApiResponse(
+            responseCode = "201",
+            description = "가입과 세션 생성 완료",
+            content = @Content(schema = @Schema(implementation = AuthSessionResponse.class))
+    )
     @PostMapping("/users")
     public ResponseEntity<AuthSessionResponse> register(
             @Valid @RequestBody RegisterRequest request,
@@ -69,6 +78,11 @@ public class UserController {
     }
 
     @Operation(summary = "계정과 전체 기록 즉시 삭제")
+    @ApiResponse(
+            responseCode = "204",
+            description = "전체 삭제 완료",
+            content = @Content
+    )
     @DeleteMapping("/me")
     public ResponseEntity<Void> deleteMe(
             @AuthenticationPrincipal AuthenticatedUser principal,

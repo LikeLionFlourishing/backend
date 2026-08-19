@@ -117,6 +117,12 @@ public enum ErrorCode {
             "선택값 조합 오류",
             "함께 고를 수 없는 선택값이 있습니다."
     ),
+    REPORT_DATE_NOT_TODAY(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "REPORT_DATE_NOT_TODAY",
+            "저장할 수 없는 날짜",
+            "오늘 날짜의 보고만 저장할 수 있습니다."
+    ),
     REPORT_ALREADY_EXISTS(
             HttpStatus.CONFLICT,
             "REPORT_ALREADY_EXISTS",
