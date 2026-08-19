@@ -180,14 +180,14 @@ class OnboardingServiceTest {
     }
 
     /**
-     * 알림을 껐는데 피커 값이 함께 온 요청도 기본 시각으로 저장한다.
+     * 알림을 껐어도 함께 온 피커 값을 그대로 저장한다.
      *
-     * <p>스키마의 if/then은 {@code notificationEnabled: true} 갈래에만 걸려 있어 이 조합도
-     * 검증을 통과한다. 그대로 저장하면 알림을 끈 사용자의 경과 입력이 21:00에 열려
-     * "이때도 기본값 17:30으로 저장한다"는 명세 문장과 갈린다.
+     * <p>푸시를 지원하지 않는 브라우저에서는 사용자가 시각을 고르고 `시작하기` 를 눌러도 구독
+     * 생성이 실패해 {@code enabled=false} 로 온다. 이때 값을 버리면 사용자가 분명히 고른
+     * 21:00 대신 17:30 에 경과 입력이 열린다.
      */
     @Test
-    void completeIgnoresPickedTimeWhenNotificationDisabled() {
+    void completeKeepsPickedTimeEvenWhenNotificationDisabled() {
         when(userConsentRepository.findByUserIdAndConsentTypeAndConsentVersion(any(), any(), any()))
                 .thenReturn(Optional.empty());
         when(notificationSettingRepository.findById(USER_ID)).thenReturn(Optional.empty());
@@ -196,8 +196,10 @@ class OnboardingServiceTest {
 
         ArgumentCaptor<NotificationSetting> captor = ArgumentCaptor.forClass(NotificationSetting.class);
         verify(notificationSettingRepository).saveAndFlush(captor.capture());
-        assertThat(captor.getValue().getNotificationTime()).isEqualTo(NotificationSetting.DEFAULT_TIME);
-        assertThat(response.getNotificationTime()).isEqualTo(NotificationSetting.DEFAULT_TIME);
+        assertThat(captor.getValue().getNotificationTime()).isEqualTo("21:00");
+        assertThat(response.getNotificationTime()).isEqualTo("21:00");
+        // 알림 자체는 꺼진 상태 그대로여야 한다.
+        assertThat(captor.getValue().isEnabled()).isFalse();
     }
 
     @Test
