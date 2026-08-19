@@ -58,6 +58,7 @@ Web Push를 쓰려면 VAPID 키쌍이 필요합니다. 생성 방법은 [README]
 | 변수 | 값 | 없으면 |
 |---|---|---|
 | `APP_DOMAIN` | `api.example.com` | 기동 전 중단 |
+| `FRONT_DOMAIN` | `app.example.com` | 프록시 기동 전 중단 |
 | `ACME_EMAIL` | 만료 알림 받을 주소 | 기동 전 중단 |
 | `DB_PASSWORD` | 임의의 강한 비밀번호 | 기동 전 중단 |
 | `RECORD_DATA_ENCRYPTION_KEY` | `openssl rand -base64 32` | 기동 전 중단 |
@@ -67,6 +68,7 @@ Web Push를 쓰려면 VAPID 키쌍이 필요합니다. 생성 방법은 [README]
 | `DOCS_BASIC_AUTH_HASH` | `caddy hash-password` 결과 | 프록시 기동 전 중단 |
 | `SESSION_COOKIE_SAME_SITE` | `Lax` 또는 `None` | `Lax` |
 | `API_DOCS_ENABLED` | `true` 면 서버에서 문서를 연다 | `false`(닫힘) |
+| `FRONT_DIST_DIR` | 프런트엔드 빌드 결과를 올려 둔 서버 경로 | `/var/www/flourishing` |
 | `VAPID_*` | P-256 키쌍 | 알림 발송만 건너뜀 |
 | `OPENAI_API_KEY`·`OPENAI_MODEL` | OpenAI 키와 모델 | AI 설명이 규칙 문구로 대체 |
 
@@ -125,6 +127,49 @@ curl -i https://api.example.com/health
 ```
 
 인자 없이 실행하면 마이그레이션과 시드만 적용하고 결과를 세어 보여 줍니다. `care_rules 26 / ingredients 8 / guide_sections 6 / active_rule_sets 1`이면 정상입니다.
+
+## 프런트엔드 올리기
+
+프런트엔드(PWA)는 같은 서버, 같은 Caddy가 다른 도메인으로 서빙합니다. 백엔드와 별도로 띄우는 서버가 아닙니다.
+
+```
+인터넷 → :443 Caddy(proxy) ─ api.example.com → app:8080
+                           └ app.example.com → /var/www/flourishing (정적 파일)
+```
+
+`app.example.com`의 A 레코드도 이 서버를 가리켜야 합니다. 없으면 인증서 발급에서 막힙니다.
+
+빌드 결과를 서버에 올립니다. 경로는 호스트 기준이고, `.env`의 `FRONT_DIST_DIR`로 바꿀 수 있습니다.
+
+```bash
+sudo mkdir -p /var/www/flourishing
+# dist/ 자체가 아니라 그 안의 내용물이 이 디렉토리에 바로 오게 합니다
+sudo rsync -a --delete ./dist/ /var/www/flourishing/
+```
+
+Caddy는 컨테이너로 돌기 때문에 호스트의 이 디렉토리를 컨테이너 안으로 물려 줘야 합니다. `docker-compose.prod.yml`의 `proxy` 볼륨과 `Caddyfile`의 `root`가 그 짝이고, 둘 다 저장소에 들어 있으니 따로 손댈 것은 없습니다.
+
+`.env`에 두 가지를 확인합니다. 프런트엔드 출처가 `FRONTEND_ALLOWED_ORIGINS`에 없으면 로그인 요청이 CORS에서 막힙니다.
+
+```bash
+FRONT_DOMAIN=app.example.com
+FRONTEND_ALLOWED_ORIGINS=https://app.example.com
+```
+
+볼륨이 늘었으므로 reload가 아니라 컨테이너를 다시 만들어야 합니다.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d proxy
+```
+
+확인합니다.
+
+```bash
+curl -I https://app.example.com/
+curl -I https://app.example.com/some/deep/link   # SPA 라우팅이라 200과 index.html 이 와야 합니다
+```
+
+`SESSION_COOKIE_SAME_SITE`는 프런트엔드가 API와 같은 등록 도메인에 있으면 `Lax` 그대로 둡니다. 다음 배포부터 정적 파일만 바꿀 때는 `rsync`만 다시 하면 됩니다. 컨테이너를 건드릴 필요가 없습니다.
 
 ## API 문서를 서버에서 열기
 

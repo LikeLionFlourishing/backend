@@ -3,7 +3,6 @@
 # Caddy 는 도메인이 적혀 있으면 Let's Encrypt 인증서를 자동으로 받고 갱신한다. 그래서 인증서
 # 파일 경로를 여기 쓰지 않는다. 첫 기동 때 도메인의 A 레코드가 이 서버를 가리키고 80 포트가
 # 열려 있어야 발급이 끝난다.
-
 {
 	email {$ACME_EMAIL}
 }
@@ -36,6 +35,51 @@
 		# 서버 종류를 알려 줄 이유가 없다.
 		-Server
 	}
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# 프런트엔드(PWA) 정적 파일. 빌드 결과 dist/ 를 서버에 올려 두면 이 블록이 그대로 서빙한다.
+# API 와 같은 서버, 같은 Caddy 를 쓰고 도메인만 다르다. 여기 적힌 root 경로는 컨테이너 안
+# 경로이고, 호스트의 실제 디렉토리는 docker-compose.prod.yml 의 proxy 볼륨이 물려 준다.
+# 둘을 따로 고치면 404 가 나므로 짝으로 본다.
+{$FRONT_DOMAIN} {
+	root * /var/www/flourishing
+
+	encode gzip zstd
+
+	# 캐시는 두 갈래로만 나눈다. /assets 아래는 빌드가 파일 이름에 해시를 붙이므로 오래
+	# 캐시해도 안전하고, 나머지는 전부 캐시하지 않는다.
+	#
+	# 경로를 하나씩 열거하지 않는 이유는 헤더 매처가 try_files 로 경로가 바뀌기 전의 요청
+	# 경로를 본다는 것이다. /index.html 만 적어 두면 정작 사용자가 실제로 여는 / 와
+	# /records/... 같은 딥링크 응답에는 캐시 지시가 하나도 붙지 않아, 브라우저가 임의로
+	# 셸을 캐시하고 새 배포가 닿지 않게 된다.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	@nocache not path /assets/*
+	header @nocache Cache-Control "no-cache, no-store, must-revalidate"
+
+	# .webmanifest 는 Caddy 기본 MIME 표에 없어 직접 지정한다.
+	@manifest path /manifest.webmanifest
+	header @manifest Content-Type "application/manifest+json"
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# SPA 라우팅. 파일이 없는 경로는 셸로 넘겨 클라이언트 라우터가 받게 한다. 이걸 빼면
+	# 새로고침이나 딥링크에서 404 가 난다.
+	try_files {path} /index.html
+	file_server
 
 	log {
 		output stdout
