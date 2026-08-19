@@ -72,7 +72,8 @@ public class GlobalExceptionHandler {
             BusinessException exception,
             HttpServletRequest request
     ) {
-        return problem(exception.getErrorCode(), request, null);
+        List<ErrorDetail> errors = exception.getErrors();
+        return problem(exception.getErrorCode(), request, errors.isEmpty() ? null : errors);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

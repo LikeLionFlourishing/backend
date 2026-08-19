@@ -1,6 +1,10 @@
 package likelion.flourishing.domain.followup.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -48,6 +52,18 @@ public class FollowUpController {
     }
 
     @Operation(summary = "다음 날 경과 저장")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "경과 저장 및 보고 COMPLETED 전환",
+                    content = @Content(schema = @Schema(implementation = FollowUpResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "같은 경과가 이미 저장되어 있음",
+                    content = @Content(schema = @Schema(implementation = FollowUpResponse.class))
+            )
+    })
     @PutMapping
     public ResponseEntity<FollowUpResponse> saveFollowUp(
             @AuthenticationPrincipal AuthenticatedUser principal,

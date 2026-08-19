@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.notification.dto.response.NotificationSettingsResponse;
+import likelion.flourishing.domain.notification.service.NotificationSettingsPatchReader;
 import likelion.flourishing.domain.notification.service.NotificationSettingsService;
 import likelion.flourishing.domain.onboarding.dto.response.NotificationConsentResponse;
 import likelion.flourishing.domain.onboarding.entity.NotificationPermission;
@@ -37,7 +38,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @WebMvcTest(NotificationSettingsController.class)
 @AutoConfigureMockMvc(addFilters = false)
 @EnableConfigurationProperties({CorsProperties.class, ProblemProperties.class})
-@Import({GlobalExceptionHandler.class, ProblemFactory.class})
+@Import({GlobalExceptionHandler.class, ProblemFactory.class, NotificationSettingsPatchReader.class})
 class NotificationSettingsControllerTest {
 
     private static final String PATH = "/v1/me/notification-settings";
@@ -78,7 +79,7 @@ class NotificationSettingsControllerTest {
                 .andExpect(jsonPath("$.time").value("21:00"));
     }
 
-    /** 명세 요청 본문은 enabled 하나뿐이다. 권한은 온보딩에서 받는다. */
+    /** 명세 요청 본문에는 enabled·time·consent 만 있다. 권한은 온보딩에서 받는다. */
     @Test
     void patchRejectsPermissionFieldInBody() throws Exception {
         mockMvc.perform(patch(PATH)
@@ -91,8 +92,9 @@ class NotificationSettingsControllerTest {
         verify(notificationSettingsService, never()).updateSettings(any(), any());
     }
 
+    /** 명세의 minProperties: 1. 아무것도 바꾸지 않는 요청은 성립하지 않는다. */
     @Test
-    void patchWithoutEnabledIsValidationError() throws Exception {
+    void patchWithAnEmptyObjectIsValidationError() throws Exception {
         mockMvc.perform(patch(PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}")

@@ -133,8 +133,18 @@
           "required": true
         },
         "responses": {
+          "201": {
+            "description": "경과 저장 및 보고 COMPLETED 전환",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowUpResponse"
+                }
+              }
+            }
+          },
           "200": {
-            "description": "OK",
+            "description": "같은 경과가 이미 저장되어 있음",
             "content": {
               "*/*": {
                 "schema": {
@@ -206,8 +216,18 @@
           "required": true
         },
         "responses": {
+          "201": {
+            "description": "최초 저장",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailyCheckInResponse"
+                }
+              }
+            }
+          },
           "200": {
-            "description": "OK",
+            "description": "같은 값이 이미 저장되어 있음",
             "content": {
               "*/*": {
                 "schema": {
@@ -237,8 +257,8 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "가입과 세션 생성 완료",
             "content": {
               "*/*": {
                 "schema": {
@@ -344,11 +364,21 @@
         },
         "responses": {
           "201": {
-            "description": "Created",
+            "description": "피부 보고 및 결과 저장 완료",
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/SkinReportCreatedResponse"
+                  "$ref": "#/components/schemas/SkinReportDetailResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "같은 Idempotency-Key 로 재전송되어 기존 응답을 그대로 돌려줌",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkinReportDetailResponse"
                 }
               }
             }
@@ -389,7 +419,7 @@
             "content": {
               "*/*": {
                 "schema": {
-                  "$ref": "#/components/schemas/CareGuideResponse"
+                  "$ref": "#/components/schemas/CareResultResponse"
                 }
               }
             }
@@ -415,8 +445,8 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "201": {
+            "description": "로그인 완료",
             "content": {
               "*/*": {
                 "schema": {
@@ -477,8 +507,18 @@
           "required": true
         },
         "responses": {
+          "201": {
+            "description": "새 구독 등록",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscriptionResponse"
+                }
+              }
+            }
+          },
           "200": {
-            "description": "OK",
+            "description": "같은 endpoint 의 기존 구독 갱신",
             "content": {
               "*/*": {
                 "schema": {
@@ -508,8 +548,8 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK",
+          "202": {
+            "description": "이벤트 접수 완료",
             "content": {
               "*/*": {
                 "schema": {
@@ -630,8 +670,8 @@
         "summary": "로그아웃",
         "operationId": "deleteCurrentSession",
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "로그아웃 완료"
           }
         }
       }
@@ -694,8 +734,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "전체 삭제 완료"
           }
         }
       }
@@ -763,8 +803,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "OK"
+          "204": {
+            "description": "구독 해제 완료"
           }
         }
       }
@@ -1193,6 +1233,10 @@
       "CreateSkinReportRequest": {
         "type": "object",
         "properties": {
+          "reportDate": {
+            "type": "string",
+            "format": "date"
+          },
           "rawText": {
             "type": "string",
             "maxLength": 500,
@@ -1216,771 +1260,9 @@
           }
         },
         "required": [
-          "confirmed"
+          "confirmed",
+          "reportDate"
         ]
-      },
-      "CareGuideResponse": {
-        "type": "object",
-        "properties": {
-          "resultType": {
-            "type": "string",
-            "enum": [
-              "SELF_CARE_GUIDE",
-              "CLINICIAN_CHECK"
-            ]
-          },
-          "matchedRuleIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "guideSections": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/GuideSectionResponse"
-            }
-          },
-          "ruleVersion": {
-            "type": "string"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "doToday": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "avoidToday": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "checkNext": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "recommendedIngredients": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RecommendedIngredientResponse"
-            }
-          },
-          "reasonTags": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "SAFETY",
-                "PROHIBITION",
-                "ENVIRONMENT",
-                "CURRENT_STATE",
-                "SITUATION",
-                "APPEARANCE",
-                "COMMON",
-                "HISTORY",
-                "INGREDIENT",
-                "FALLBACK"
-              ]
-            }
-          },
-          "clinicianMessage": {
-            "type": "string"
-          },
-          "similarExperience": {
-            "$ref": "#/components/schemas/SimilarExperienceSummaryResponse"
-          },
-          "aiGenerationStatus": {
-            "type": "string",
-            "enum": [
-              "GENERATED",
-              "FALLBACK",
-              "NOT_APPLICABLE"
-            ]
-          },
-          "generatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "retryUsed": {
-            "type": "boolean"
-          }
-        }
-      },
-      "GuideSectionResponse": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "enum": [
-              "CURRENT_SUMMARY",
-              "DO_TODAY",
-              "AVOID_TODAY",
-              "SIMILAR_EXPERIENCE",
-              "CHECK_NEXT",
-              "RECOMMENDED_INGREDIENTS"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "empty": {
-            "type": "boolean"
-          }
-        }
-      },
-      "RecommendedIngredientResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "cautionNote": {
-            "type": "string"
-          },
-          "sourceRuleIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "SimilarExperienceSummaryResponse": {
-        "type": "object",
-        "properties": {
-          "reportId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "reportDate": {
-            "type": "string",
-            "format": "date"
-          },
-          "score": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "summary": {
-            "type": "string"
-          },
-          "skinChange": {
-            "type": "string",
-            "enum": [
-              "IMPROVED",
-              "SIMILAR",
-              "WORSENED"
-            ]
-          }
-        }
-      },
-      "SkinReportCreatedResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "reportDate": {
-            "type": "string",
-            "format": "date"
-          },
-          "resultType": {
-            "type": "string",
-            "enum": [
-              "SELF_CARE_GUIDE",
-              "CLINICIAN_CHECK"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "FOLLOW_UP_PENDING",
-              "COMPLETED",
-              "EXPIRED"
-            ]
-          },
-          "rawText": {
-            "type": "string"
-          },
-          "confirmed": {
-            "$ref": "#/components/schemas/StructuredSelectionsResponse"
-          },
-          "preCareChecks": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "SPREADING_RAPIDLY",
-                "SEVERE_PAIN_HEAT_SWELLING",
-                "PUS_OOZING_BLISTER",
-                "NONE"
-              ]
-            }
-          },
-          "careResult": {
-            "$ref": "#/components/schemas/CareGuideResponse"
-          },
-          "followUpAvailableAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "followUpExpiresAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "StructuredSelectionsResponse": {
-        "type": "object",
-        "properties": {
-          "primaryArea": {
-            "type": "string",
-            "enum": [
-              "LEFT_FOREHEAD",
-              "CENTER_FOREHEAD",
-              "RIGHT_FOREHEAD",
-              "NOSE",
-              "LEFT_CHEEK",
-              "RIGHT_CHEEK",
-              "AROUND_MOUTH",
-              "LEFT_CHIN",
-              "RIGHT_CHIN",
-              "LEFT_JAWLINE",
-              "RIGHT_JAWLINE",
-              "NECK",
-              "OTHER"
-            ]
-          },
-          "otherAreasNote": {
-            "type": "string"
-          },
-          "appearances": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "APP_REDNESS",
-                "APP_BUMP",
-                "APP_PUS_BUMP",
-                "APP_DRYNESS",
-                "APP_OILINESS",
-                "APP_OTHER"
-              ]
-            }
-          },
-          "sensations": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "REDNESS",
-                "EXCESS_SEBUM",
-                "BREAKOUT"
-              ]
-            }
-          },
-          "situations": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "PROTECTIVE_GEAR_OR_MASK",
-                "SHAVING",
-                "SQUEEZED_ACNE",
-                "NEW_PRODUCT",
-                "SWEAT_OR_SEBUM",
-                "NONE_RECALLED"
-              ]
-            }
-          },
-          "careAvailability": {
-            "type": "string",
-            "enum": [
-              "BEFORE_WASH_CAN_WASH_LATER",
-              "ALREADY_WASHED",
-              "CAN_CARE_BEFORE_SLEEP",
-              "ADDITIONAL_CARE_DIFFICULT"
-            ]
-          }
-        }
-      },
-      "LoginRequest": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "maxLength": 254,
-            "minLength": 0
-          },
-          "password": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 0
-          }
-        }
-      },
-      "ManualSelectionsRequest": {
-        "type": "object",
-        "properties": {
-          "primaryArea": {
-            "type": "string",
-            "enum": [
-              "LEFT_FOREHEAD",
-              "CENTER_FOREHEAD",
-              "RIGHT_FOREHEAD",
-              "NOSE",
-              "LEFT_CHEEK",
-              "RIGHT_CHEEK",
-              "AROUND_MOUTH",
-              "LEFT_CHIN",
-              "RIGHT_CHIN",
-              "LEFT_JAWLINE",
-              "RIGHT_JAWLINE",
-              "NECK",
-              "OTHER"
-            ]
-          },
-          "otherAreasNote": {
-            "type": "string",
-            "maxLength": 200,
-            "minLength": 0
-          },
-          "appearances": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "APP_REDNESS",
-                "APP_BUMP",
-                "APP_PUS_BUMP",
-                "APP_DRYNESS",
-                "APP_OILINESS",
-                "APP_OTHER"
-              ]
-            }
-          },
-          "sensations": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "REDNESS",
-                "EXCESS_SEBUM",
-                "BREAKOUT"
-              ]
-            }
-          },
-          "situations": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "PROTECTIVE_GEAR_OR_MASK",
-                "SHAVING",
-                "SQUEEZED_ACNE",
-                "NEW_PRODUCT",
-                "SWEAT_OR_SEBUM",
-                "NONE_RECALLED"
-              ]
-            }
-          },
-          "careAvailability": {
-            "type": "string",
-            "enum": [
-              "BEFORE_WASH_CAN_WASH_LATER",
-              "ALREADY_WASHED",
-              "CAN_CARE_BEFORE_SLEEP",
-              "ADDITIONAL_CARE_DIFFICULT"
-            ]
-          }
-        }
-      },
-      "ReportInterpretationRequest": {
-        "type": "object",
-        "properties": {
-          "rawText": {
-            "type": "string",
-            "maxLength": 500,
-            "minLength": 0
-          },
-          "manualSelections": {
-            "$ref": "#/components/schemas/ManualSelectionsRequest"
-          }
-        }
-      },
-      "ReportInterpretationResponse": {
-        "type": "object",
-        "properties": {
-          "processingStatus": {
-            "type": "string",
-            "enum": [
-              "SUCCEEDED",
-              "FAILED"
-            ]
-          },
-          "failureCode": {
-            "type": "string",
-            "enum": [
-              "AI_NOT_CONFIGURED",
-              "AI_TIMEOUT",
-              "AI_UNREACHABLE",
-              "AI_HTTP_ERROR",
-              "AI_REFUSED",
-              "AI_INCOMPLETE",
-              "AI_MALFORMED_OUTPUT",
-              "AI_SCHEMA_VIOLATION"
-            ]
-          },
-          "structured": {
-            "$ref": "#/components/schemas/StructuredSelectionsResponse"
-          },
-          "fieldSources": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string",
-              "enum": [
-                "MANUAL",
-                "AI",
-                "NONE"
-              ]
-            }
-          },
-          "interpretedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "PushSubscriptionKeysRequest": {
-        "type": "object",
-        "properties": {
-          "p256dh": {
-            "type": "string",
-            "maxLength": 512,
-            "minLength": 20
-          },
-          "auth": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 8
-          }
-        }
-      },
-      "RegisterPushSubscriptionRequest": {
-        "type": "object",
-        "properties": {
-          "endpoint": {
-            "type": "string",
-            "maxLength": 2048,
-            "minLength": 0,
-            "pattern": "^https://[^\\s]+$"
-          },
-          "expirationTime": {
-            "type": "string"
-          },
-          "keys": {
-            "$ref": "#/components/schemas/PushSubscriptionKeysRequest"
-          },
-          "userAgent": {
-            "type": "string",
-            "maxLength": 512,
-            "minLength": 0
-          }
-        },
-        "required": [
-          "keys"
-        ]
-      },
-      "PushSubscriptionResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "endpointFingerprint": {
-            "type": "string"
-          },
-          "active": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "AnalyticsEventBatchRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "events": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AnalyticsEventRequest"
-            },
-            "maxItems": 20,
-            "minItems": 1
-          }
-        },
-        "required": [
-          "events"
-        ]
-      },
-      "AnalyticsEventPropertiesRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "durationMs": {
-            "type": "integer",
-            "format": "int64",
-            "maximum": 3600000
-          },
-          "inputAssistUsed": {
-            "type": "boolean"
-          },
-          "resultType": {
-            "type": "string"
-          },
-          "aiSucceeded": {
-            "type": "boolean"
-          },
-          "ingredientCount": {
-            "type": "integer",
-            "format": "int32",
-            "maximum": 3
-          },
-          "usedDefaultTime": {
-            "type": "boolean"
-          }
-        }
-      },
-      "AnalyticsEventRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "eventId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^(ONBOARDING_COMPLETED|REPORT_STARTED|INPUT_ASSIST_OPENED|AI_STRUCTURING_SUCCEEDED|AI_STRUCTURING_FAILED|REPORT_SUBMITTED|CARE_RESULT_VIEWED|FOLLOW_UP_SUBMITTED|SIMILAR_EXPERIENCE_VIEWED|RECOMMENDED_INGREDIENTS_VIEWED|NOTIFICATION_TIME_SET)$"
-          },
-          "properties": {
-            "$ref": "#/components/schemas/AnalyticsEventPropertiesRequest"
-          },
-          "occurredAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "eventId",
-          "occurredAt"
-        ]
-      },
-      "AnalyticsEventBatchResponse": {
-        "type": "object",
-        "properties": {
-          "accepted": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "UpdateNotificationSettingsRequest": {
-        "type": "object",
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "time": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "enabled"
-        ]
-      },
-      "NotificationSettingsResponse": {
-        "type": "object",
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "time": {
-            "type": "string"
-          },
-          "timezone": {
-            "type": "string"
-          },
-          "timeEditable": {
-            "type": "boolean"
-          },
-          "permission": {
-            "type": "string",
-            "enum": [
-              "DEFAULT",
-              "GRANTED",
-              "DENIED",
-              "UNSUPPORTED"
-            ]
-          },
-          "consent": {
-            "$ref": "#/components/schemas/NotificationConsentResponse"
-          },
-          "activeSubscriptionCount": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
-      "CursorPageResponse": {
-        "type": "object",
-        "properties": {
-          "nextCursor": {
-            "type": "string"
-          },
-          "hasMore": {
-            "type": "boolean"
-          },
-          "limit": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "SkinReportListResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SkinReportSummaryResponse"
-            }
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/CursorPageResponse"
-          }
-        }
-      },
-      "SkinReportSummaryResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "reportDate": {
-            "type": "string",
-            "format": "date"
-          },
-          "primaryArea": {
-            "type": "string",
-            "enum": [
-              "LEFT_FOREHEAD",
-              "CENTER_FOREHEAD",
-              "RIGHT_FOREHEAD",
-              "NOSE",
-              "LEFT_CHEEK",
-              "RIGHT_CHEEK",
-              "AROUND_MOUTH",
-              "LEFT_CHIN",
-              "RIGHT_CHIN",
-              "LEFT_JAWLINE",
-              "RIGHT_JAWLINE",
-              "NECK",
-              "OTHER"
-            ]
-          },
-          "appearances": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "APP_REDNESS",
-                "APP_BUMP",
-                "APP_PUS_BUMP",
-                "APP_DRYNESS",
-                "APP_OILINESS",
-                "APP_OTHER"
-              ]
-            }
-          },
-          "sensations": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "REDNESS",
-                "EXCESS_SEBUM",
-                "BREAKOUT"
-              ]
-            }
-          },
-          "situations": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "PROTECTIVE_GEAR_OR_MASK",
-                "SHAVING",
-                "SQUEEZED_ACNE",
-                "NEW_PRODUCT",
-                "SWEAT_OR_SEBUM",
-                "NONE_RECALLED"
-              ]
-            }
-          },
-          "resultType": {
-            "type": "string",
-            "enum": [
-              "SELF_CARE_GUIDE",
-              "CLINICIAN_CHECK"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "FOLLOW_UP_PENDING",
-              "COMPLETED",
-              "EXPIRED"
-            ]
-          },
-          "skinChange": {
-            "type": "string",
-            "enum": [
-              "IMPROVED",
-              "SIMILAR",
-              "WORSENED"
-            ]
-          }
-        }
       },
       "CareResultResponse": {
         "type": "object",
@@ -2149,6 +1431,54 @@
           }
         }
       },
+      "GuideSectionResponse": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "CURRENT_SUMMARY",
+              "DO_TODAY",
+              "AVOID_TODAY",
+              "SIMILAR_EXPERIENCE",
+              "CHECK_NEXT",
+              "RECOMMENDED_INGREDIENTS"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "empty": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RecommendedIngredientResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "cautionNote": {
+            "type": "string"
+          },
+          "sourceRuleIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "SimilarExperienceResponse": {
         "type": "object",
         "properties": {
@@ -2295,6 +1625,566 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 0
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 0
+          }
+        }
+      },
+      "ManualSelectionsRequest": {
+        "type": "object",
+        "properties": {
+          "primaryArea": {
+            "type": "string",
+            "enum": [
+              "LEFT_FOREHEAD",
+              "CENTER_FOREHEAD",
+              "RIGHT_FOREHEAD",
+              "NOSE",
+              "LEFT_CHEEK",
+              "RIGHT_CHEEK",
+              "AROUND_MOUTH",
+              "LEFT_CHIN",
+              "RIGHT_CHIN",
+              "LEFT_JAWLINE",
+              "RIGHT_JAWLINE",
+              "NECK",
+              "OTHER"
+            ]
+          },
+          "otherAreasNote": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "appearances": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "APP_REDNESS",
+                "APP_BUMP",
+                "APP_PUS_BUMP",
+                "APP_DRYNESS",
+                "APP_OILINESS",
+                "APP_OTHER"
+              ]
+            }
+          },
+          "sensations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "REDNESS",
+                "EXCESS_SEBUM",
+                "BREAKOUT"
+              ]
+            }
+          },
+          "situations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "PROTECTIVE_GEAR_OR_MASK",
+                "SHAVING",
+                "SQUEEZED_ACNE",
+                "NEW_PRODUCT",
+                "SWEAT_OR_SEBUM",
+                "NONE_RECALLED"
+              ]
+            }
+          },
+          "careAvailability": {
+            "type": "string",
+            "enum": [
+              "BEFORE_WASH_CAN_WASH_LATER",
+              "ALREADY_WASHED",
+              "CAN_CARE_BEFORE_SLEEP",
+              "ADDITIONAL_CARE_DIFFICULT"
+            ]
+          }
+        }
+      },
+      "ReportInterpretationRequest": {
+        "type": "object",
+        "properties": {
+          "rawText": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 0
+          },
+          "manualSelections": {
+            "$ref": "#/components/schemas/ManualSelectionsRequest"
+          }
+        }
+      },
+      "AmbiguityResponse": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "ReportInterpretationResponse": {
+        "type": "object",
+        "properties": {
+          "processingStatus": {
+            "type": "string",
+            "enum": [
+              "SUCCESS",
+              "FAILED"
+            ]
+          },
+          "proposed": {
+            "$ref": "#/components/schemas/StructuredSelectionsResponse"
+          },
+          "missingFields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "PRIMARY_AREA",
+                "APPEARANCES",
+                "SENSATIONS",
+                "SITUATIONS",
+                "CARE_AVAILABILITY"
+              ]
+            }
+          },
+          "ambiguities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AmbiguityResponse"
+            }
+          },
+          "failureCode": {
+            "type": "string",
+            "enum": [
+              "AI_TIMEOUT",
+              "AI_INVALID_OUTPUT",
+              "AI_UNAVAILABLE"
+            ]
+          }
+        }
+      },
+      "StructuredSelectionsResponse": {
+        "type": "object",
+        "properties": {
+          "primaryArea": {
+            "type": "string",
+            "enum": [
+              "LEFT_FOREHEAD",
+              "CENTER_FOREHEAD",
+              "RIGHT_FOREHEAD",
+              "NOSE",
+              "LEFT_CHEEK",
+              "RIGHT_CHEEK",
+              "AROUND_MOUTH",
+              "LEFT_CHIN",
+              "RIGHT_CHIN",
+              "LEFT_JAWLINE",
+              "RIGHT_JAWLINE",
+              "NECK",
+              "OTHER"
+            ]
+          },
+          "otherAreasNote": {
+            "type": "string"
+          },
+          "appearances": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "APP_REDNESS",
+                "APP_BUMP",
+                "APP_PUS_BUMP",
+                "APP_DRYNESS",
+                "APP_OILINESS",
+                "APP_OTHER"
+              ]
+            }
+          },
+          "sensations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "REDNESS",
+                "EXCESS_SEBUM",
+                "BREAKOUT"
+              ]
+            }
+          },
+          "situations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "PROTECTIVE_GEAR_OR_MASK",
+                "SHAVING",
+                "SQUEEZED_ACNE",
+                "NEW_PRODUCT",
+                "SWEAT_OR_SEBUM",
+                "NONE_RECALLED"
+              ]
+            }
+          },
+          "careAvailability": {
+            "type": "string",
+            "enum": [
+              "BEFORE_WASH_CAN_WASH_LATER",
+              "ALREADY_WASHED",
+              "CAN_CARE_BEFORE_SLEEP",
+              "ADDITIONAL_CARE_DIFFICULT"
+            ]
+          }
+        }
+      },
+      "PushSubscriptionKeysRequest": {
+        "type": "object",
+        "properties": {
+          "p256dh": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 20
+          },
+          "auth": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 8
+          }
+        }
+      },
+      "RegisterPushSubscriptionRequest": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 0,
+            "pattern": "^https://[^\\s]+$"
+          },
+          "expirationTime": {
+            "type": "string"
+          },
+          "keys": {
+            "$ref": "#/components/schemas/PushSubscriptionKeysRequest"
+          },
+          "userAgent": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "keys"
+        ]
+      },
+      "PushSubscriptionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "endpointFingerprint": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AnalyticsEventBatchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsEventRequest"
+            },
+            "maxItems": 20,
+            "minItems": 1
+          }
+        },
+        "required": [
+          "events"
+        ]
+      },
+      "AnalyticsEventPropertiesRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "durationMs": {
+            "type": "integer",
+            "format": "int64",
+            "maximum": 3600000
+          },
+          "inputAssistUsed": {
+            "type": "boolean"
+          },
+          "resultType": {
+            "type": "string"
+          },
+          "aiSucceeded": {
+            "type": "boolean"
+          },
+          "ingredientCount": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 3
+          },
+          "usedDefaultTime": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AnalyticsEventRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(ONBOARDING_COMPLETED|REPORT_STARTED|INPUT_ASSIST_OPENED|AI_STRUCTURING_SUCCEEDED|AI_STRUCTURING_FAILED|REPORT_SUBMITTED|CARE_RESULT_VIEWED|FOLLOW_UP_SUBMITTED|SIMILAR_EXPERIENCE_VIEWED|RECOMMENDED_INGREDIENTS_VIEWED|NOTIFICATION_TIME_SET)$"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/AnalyticsEventPropertiesRequest"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "eventId",
+          "occurredAt"
+        ]
+      },
+      "AnalyticsEventBatchResponse": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "NotificationConsentInput": {
+        "type": "object",
+        "properties": {
+          "agreed": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1
+          }
+        },
+        "required": [
+          "agreed"
+        ]
+      },
+      "UpdateNotificationSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "time": {
+            "type": "string",
+            "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/NotificationConsentInput"
+          }
+        }
+      },
+      "NotificationSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "time": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "timeEditable": {
+            "type": "boolean"
+          },
+          "permission": {
+            "type": "string",
+            "enum": [
+              "DEFAULT",
+              "GRANTED",
+              "DENIED",
+              "UNSUPPORTED"
+            ]
+          },
+          "consent": {
+            "$ref": "#/components/schemas/NotificationConsentResponse"
+          },
+          "activeSubscriptionCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CursorPageResponse": {
+        "type": "object",
+        "properties": {
+          "nextCursor": {
+            "type": "string"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SkinReportListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkinReportSummaryResponse"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/CursorPageResponse"
+          }
+        }
+      },
+      "SkinReportSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reportDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "primaryArea": {
+            "type": "string",
+            "enum": [
+              "LEFT_FOREHEAD",
+              "CENTER_FOREHEAD",
+              "RIGHT_FOREHEAD",
+              "NOSE",
+              "LEFT_CHEEK",
+              "RIGHT_CHEEK",
+              "AROUND_MOUTH",
+              "LEFT_CHIN",
+              "RIGHT_CHIN",
+              "LEFT_JAWLINE",
+              "RIGHT_JAWLINE",
+              "NECK",
+              "OTHER"
+            ]
+          },
+          "appearances": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "APP_REDNESS",
+                "APP_BUMP",
+                "APP_PUS_BUMP",
+                "APP_DRYNESS",
+                "APP_OILINESS",
+                "APP_OTHER"
+              ]
+            }
+          },
+          "sensations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "REDNESS",
+                "EXCESS_SEBUM",
+                "BREAKOUT"
+              ]
+            }
+          },
+          "situations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "PROTECTIVE_GEAR_OR_MASK",
+                "SHAVING",
+                "SQUEEZED_ACNE",
+                "NEW_PRODUCT",
+                "SWEAT_OR_SEBUM",
+                "NONE_RECALLED"
+              ]
+            }
+          },
+          "resultType": {
+            "type": "string",
+            "enum": [
+              "SELF_CARE_GUIDE",
+              "CLINICIAN_CHECK"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "FOLLOW_UP_PENDING",
+              "COMPLETED",
+              "EXPIRED"
+            ]
+          },
+          "skinChange": {
+            "type": "string",
+            "enum": [
+              "IMPROVED",
+              "SIMILAR",
+              "WORSENED"
+            ]
           }
         }
       },

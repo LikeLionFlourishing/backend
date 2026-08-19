@@ -1,22 +1,37 @@
 package likelion.flourishing.global.exception;
 
+import java.util.List;
+import likelion.flourishing.global.response.ErrorDetail;
 import lombok.Getter;
 
 /**
- * 업무 규칙 위반을 알리는 예외. 던지면 {@link GlobalExceptionHandler}가 받아
- * {@link ErrorCode}에 정의된 상태 코드와 명세 Problem 형식으로 응답한다.
+ * 업무 규칙 위반. 상태 코드와 코드 문자열은 {@link ErrorCode}가 정한다.
  *
- * <p>서비스 계층이 HTTP 상태 코드를 직접 다루지 않게 하려고 둔 것이다. 예를 들어
- * 중복 이메일이면 ErrorCode.EMAIL_ALREADY_REGISTERED만 던지고, 그것이 409가 된다는 사실은
- * ErrorCode가 안다.
+ * <p>어느 필드가 문제였는지 알려 줘야 하는 규칙이 있어 errors 를 함께 실을 수 있게 두었다.
+ * 빈 목록이면 응답의 errors 는 생략된다. Bean Validation 이 잡는 형식 오류와 달리, 값의
+ * 형식은 맞지만 규칙에 어긋나는 경우를 같은 모양으로 돌려주기 위한 것이다.
  */
 @Getter
 public class BusinessException extends RuntimeException {
 
     private final ErrorCode errorCode;
+    private final List<ErrorDetail> errors;
 
     public BusinessException(ErrorCode errorCode) {
+        this(errorCode, List.of());
+    }
+
+    public BusinessException(ErrorCode errorCode, List<ErrorDetail> errors) {
         super(errorCode.getDetail());
         this.errorCode = errorCode;
+        this.errors = List.copyOf(errors);
+    }
+
+    /** 필드 오류가 하나뿐인 흔한 경우를 짧게 쓰기 위한 생성자. */
+    public static BusinessException ofField(ErrorCode errorCode, String field) {
+        return new BusinessException(
+                errorCode,
+                List.of(ErrorDetail.of(field, errorCode.getCode(), errorCode.getDetail()))
+        );
     }
 }

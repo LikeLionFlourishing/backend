@@ -13,8 +13,8 @@ import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.crypto.ReportTextCipher;
 import likelion.flourishing.domain.report.dto.request.ConfirmedSelectionsRequest;
 import likelion.flourishing.domain.report.dto.request.CreateSkinReportRequest;
-import likelion.flourishing.domain.report.dto.response.SkinReportCreatedResponse;
-import likelion.flourishing.domain.report.dto.response.StructuredSelectionsResponse;
+import likelion.flourishing.domain.record.dto.response.SkinReportDetailResponse;
+import likelion.flourishing.domain.record.service.SkinReportDetailAssembler;
 import likelion.flourishing.domain.report.entity.Appearance;
 import likelion.flourishing.domain.report.entity.PreCareCheck;
 import likelion.flourishing.domain.report.entity.ResultType;
@@ -111,7 +111,7 @@ public class SkinReportSubmissionService {
         Set<PreCareCheck> preCareChecks = request.preCareCheckSet();
         SkinReportPolicy.assertExclusiveSelections(situations, preCareChecks);
 
-        LocalDate reportDate = SkinReportPolicy.today(clock);
+        LocalDate reportDate = assertReportDateIsToday(request.reportDate());
         Object fingerprint = fingerprintOf(
                 request, reportDate, appearances, sensations, situations, preCareChecks
         );
@@ -201,29 +201,25 @@ public class SkinReportSubmissionService {
                 .orElseThrow(() -> conflict);
     }
 
-    private SkinReportCreatedResponse toResponse(
+    /**
+     * 생성 응답을 상세 조회와 같은 타입으로 만든다.
+     *
+     * <p>갓 만든 보고는 status 가 FOLLOW_UP_PENDING 이고 경과가 아직 없으므로 followUp 과
+     * skinChange 는 null 이다.
+     *
+     * <p>경과 입력 가능 시각과 만료 시각은 명세에 없어 담지 않는다. 같은 정보를
+     * GET /v1/home 의 pendingFollowUp 이 availableFrom·expiresAt 으로 이미 내려 준다.
+     */
+    private SkinReportDetailResponse toResponse(
             SkinReport report,
             CreateSkinReportRequest request,
             GeneratedCareResult generated,
             SimilarExperienceLookup lookup
     ) {
-        StructuredSelectionsResponse confirmed = StructuredSelectionsResponse.of(
-                report.getPrimaryArea(),
-                trimToNull(request.confirmed().otherAreasNote()),
-                sorted(report.getAppearances()),
-                sorted(report.getSensations()),
-                sorted(report.getSituations()),
-                report.getCareAvailability()
-        );
-
-        return SkinReportCreatedResponse.of(
-                report.getId(),
-                report.getReportDate(),
-                report.getResultType(),
-                report.getStatus(),
+        return SkinReportDetailAssembler.assemble(
+                report,
                 request.rawText(),
-                confirmed,
-                sorted(report.getPreCareChecks()),
+                trimToNull(request.confirmed().otherAreasNote()),
                 careGuideResponseAssembler.assemble(
                         generated.careResult(),
                         generated.ruleVersion(),
@@ -232,8 +228,8 @@ public class SkinReportSubmissionService {
                         generated.ingredients(),
                         lookup.found().map(FoundSimilarExperience::response).orElse(null)
                 ),
-                report.getFollowUpAvailableAt().atOffset(ZoneOffset.UTC),
-                report.getFollowUpExpiresAt().atOffset(ZoneOffset.UTC),
+                null,
+                null,
                 createdAtOf(report).atOffset(ZoneOffset.UTC)
         );
     }
@@ -247,6 +243,21 @@ public class SkinReportSubmissionService {
      * <p>보고 날짜도 함께 담는다. 기록은 24시간 보관하므로 자정을 넘겨 같은 키로 재시도하면 어제
      * 응답이 그대로 나갈 수 있다. 날짜가 지문에 있으면 다른 요청으로 보아 409로 막힌다.
      */
+    /**
+     * 요청 날짜가 Asia/Seoul 기준 오늘인지 확인한다.
+     *
+     * <p>하루 오차를 허용하지 않는다. 허용하면 어제 자리에 오늘 보고가 들어가 "하루 한 건" 제약과
+     * 경과 입력 가능 시각이 함께 어긋난다. 자정 근처에서 사용자가 손해를 보는 대신, 클라이언트가
+     * 422를 받고 날짜를 다시 읽어 화면을 갱신하는 쪽을 택했다.
+     */
+    private LocalDate assertReportDateIsToday(LocalDate requested) {
+        LocalDate today = SkinReportPolicy.today(clock);
+        if (!today.equals(requested)) {
+            throw BusinessException.ofField(ErrorCode.REPORT_DATE_NOT_TODAY, "reportDate");
+        }
+        return requested;
+    }
+
     private Object fingerprintOf(
             CreateSkinReportRequest request,
             LocalDate reportDate,

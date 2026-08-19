@@ -1,6 +1,10 @@
 package likelion.flourishing.domain.notification.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -42,6 +46,18 @@ public class PushSubscriptionController {
     }
 
     @Operation(summary = "Push 구독 등록")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "201",
+                    description = "새 구독 등록",
+                    content = @Content(schema = @Schema(implementation = PushSubscriptionResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "같은 endpoint 의 기존 구독 갱신",
+                    content = @Content(schema = @Schema(implementation = PushSubscriptionResponse.class))
+            )
+    })
     @PostMapping
     public ResponseEntity<PushSubscriptionResponse> register(
             @AuthenticationPrincipal AuthenticatedUser principal,
@@ -60,6 +76,11 @@ public class PushSubscriptionController {
     }
 
     @Operation(summary = "Push 구독 해제")
+    @ApiResponse(
+            responseCode = "204",
+            description = "구독 해제 완료",
+            content = @Content
+    )
     @DeleteMapping("/{subscriptionId}")
     public ResponseEntity<Void> unregister(
             @AuthenticationPrincipal AuthenticatedUser principal,

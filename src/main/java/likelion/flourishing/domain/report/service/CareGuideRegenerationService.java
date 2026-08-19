@@ -17,8 +17,8 @@ import likelion.flourishing.domain.auth.security.AuthenticatedUser;
 import likelion.flourishing.domain.report.ai.CareGuideNarrationPort;
 import likelion.flourishing.domain.report.ai.NarrationCommand;
 import likelion.flourishing.domain.report.ai.NarrationOutcome;
-import likelion.flourishing.domain.report.dto.response.CareGuideResponse;
-import likelion.flourishing.domain.report.dto.response.SimilarExperienceSummaryResponse;
+import likelion.flourishing.domain.record.dto.response.CareResultResponse;
+import likelion.flourishing.domain.record.dto.response.SimilarExperienceResponse;
 import likelion.flourishing.domain.report.entity.AiGenerationStatus;
 import likelion.flourishing.domain.report.entity.CareResult;
 import likelion.flourishing.domain.report.entity.RuleActionType;
@@ -163,7 +163,7 @@ public class CareGuideRegenerationService {
         CareResult updated = applyOutcome(careResult, narration, planned);
         List<PlannedCareItem> items = planned.isEmpty() ? storedItems(careResult.getId()) : planned;
 
-        CareGuideResponse response = careGuideResponseAssembler.assemble(
+        CareResultResponse response = careGuideResponseAssembler.assemble(
                 updated,
                 appliedRuleSet.versionCode(),
                 appliedRuleSet.rules(),
@@ -272,7 +272,7 @@ public class CareGuideRegenerationService {
                 .toList();
     }
 
-    private SimilarExperienceSummaryResponse describeSimilarExperience(UUID userId, CareResult careResult) {
+    private SimilarExperienceResponse describeSimilarExperience(UUID userId, CareResult careResult) {
         if (careResult.getSimilarReportId() == null || careResult.getSimilarityScore() == null) {
             return null;
         }
